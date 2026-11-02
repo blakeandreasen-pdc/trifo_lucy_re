@@ -1,0 +1,1154 @@
+// ===== proto/cloud_map_layer_msg.proto  (from libtrifo_core_items.so, 583 bytes)
+// package trifo.proto
+// import "proto/item_msg.proto";
+message CloudGridMsg {
+  optional double cell_size = 1;
+  optional int64 height = 2;
+  optional int64 width = 3;
+  optional double max_x = 4;
+  optional double max_y = 5;
+  optional bytes data = 6;
+  optional uint32 type_len = 7;
+}
+message CloudMultiMapLayerMsg {
+  message IdToMapsEntry {
+    optional string key = 1;
+    optional trifo.proto.CloudGridMsg value = 2;
+  }
+  optional double align_angle = 1;
+  repeated trifo.proto.CloudMultiMapLayerMsg.IdToMapsEntry id_to_maps = 2;
+  optional trifo.proto.Pose2DItemMsg robot_pos = 3;
+  optional trifo.proto.Pose2DItemMsg charger_pos = 4;
+  optional uint64 timestamp = 5;
+  optional trifo.proto.SemanticInstancesItemMsg semantic_instance_data = 6;
+}
+
+// ===== proto/cloud_map_manage_msg.proto  (from libtrifo_core_items.so, 2207 bytes)
+// package trifo.proto
+// import "proto/map_layer_msg.proto";
+// import "proto/cloud_map_layer_msg.proto";
+enum MapCommand {
+  GET = 0;
+  POST = 1;
+  DELETE = 2;
+  RUN = 3;
+  REFRESH = 4;
+}
+enum MapPathType {
+  NO_GO_ZONE = 0;
+  DESIGNATED_AREA = 1;
+  PATROL_ROUTE = 2;
+  ROOM_SEGMENTATION = 3;
+  SEMANTIC_INSTANCE = 4;
+}
+message OneMapInfoMsg {
+  optional uint32 map_id = 1;
+  optional uint32 enable = 2;
+  optional string map_name = 3;
+  optional trifo.proto.CloudMultiMapLayerMsg map_detail = 4;
+  optional uint32 enable_refresh = 5;
+  optional uint32 map_rows = 6;
+  optional uint32 map_cols = 7;
+  optional uint32 rotated_map_rows = 8;
+  optional uint32 rotated_map_cols = 9;
+  optional double map_rotation_angle = 10;
+  optional double cell_size = 11;
+  optional trifo.proto.Affine2DMsg max_point = 12;
+  repeated trifo.proto.Affine2DMsg beauty_map = 13;
+  optional trifo.proto.Affine2DMsg charger_pos = 14;
+}
+message MapListMsg {
+  repeated trifo.proto.OneMapInfoMsg maps = 2;
+}
+message Path2DMsg {
+  optional uint32 path_id = 1;
+  optional string path_name = 2;
+  repeated trifo.proto.Affine2DMsg pose = 3;
+  optional uint32 state = 4;
+  optional string semantic_instance_type = 5;
+}
+message MapPathInfoMsg {
+  optional uint32 map_id = 1;
+  optional trifo.proto.MapPathType path_type = 2;
+  repeated trifo.proto.Path2DMsg paths = 3;
+  optional uint32 room_segment_edited = 4;
+  repeated trifo.proto.RoomSegmentationDataMsg rooms = 5;
+  repeated trifo.proto.SemanticInstanceDataMsg semantic_instances = 6;
+}
+message RoomSegmentationDataMsg {
+  optional uint32 type = 1;
+  optional uint32 type_index = 2;
+  optional string name = 3;
+  optional uint32 index = 4;
+  repeated trifo.proto.Affine2DMsg contour = 5;
+  optional trifo.proto.Affine2DMsg seed = 6;
+  optional double rotation_angle = 7;
+  repeated trifo.proto.Affine2DMsg rotated_contour = 8;
+  optional trifo.proto.Affine2DMsg rotated_seed = 9;
+  optional uint32 selected = 10;
+}
+message SemanticInstanceDataMsg {
+  optional uint32 index = 1;
+  optional string type = 2;
+  optional string name = 3;
+  repeated trifo.proto.Affine2DMsg contour = 4;
+  optional uint32 selected = 5;
+}
+message CloudMapLayerMsg {
+  optional trifo.proto.OneMapInfoMsg map_info = 1;
+  repeated trifo.proto.MapPathInfoMsg map_path_info = 2;
+}
+message MapPathCommandMsg {
+  optional uint32 map_id = 1;
+  optional trifo.proto.MapPathType path_type = 2;
+  repeated uint32 path_ids = 3;
+}
+message MapManageDataItemMsg {
+  optional trifo.proto.MapCommand command = 1;
+  optional uint32 reply_result = 2;
+  optional uint32 type = 3;
+  optional trifo.proto.MapListMsg map_list = 4;
+  optional trifo.proto.OneMapInfoMsg map_info = 5;
+  optional trifo.proto.MapPathInfoMsg map_paths = 6;
+  optional trifo.proto.MapPathCommandMsg path_command = 7;
+  optional trifo.proto.CloudMapLayerMsg map_layers = 8;
+}
+
+// ===== proto/cloud_status_data_msg.proto  (from libtrifo_core_items.so, 1313 bytes)
+// package trifo.proto
+message CloudModeSwitchDataMsg {
+  optional int32 type = 1;
+}
+message CloudStreamStatusDataMsg {
+  optional uint32 inner_net = 1;
+  optional uint32 outer_net = 2;
+  optional string ip_address = 3;
+}
+message CloudBlowerModeDataMsg {
+  optional uint32 mode = 1;
+}
+message CloudVoiceTypeDataMsg {
+  optional string type_path = 1;
+  optional uint32 quiet_mode = 2;
+  optional uint32 voice_volume = 3;
+  optional uint32 voice_type = 4;
+}
+message CloudVoiceTalkStatusDataMsg {
+  optional uint32 talk_status = 1;
+  optional string talk_id = 2;
+  optional string stream_domain = 3;
+  optional string stream_key = 4;
+  optional string app_name = 5;
+  optional uint32 stream_cloud_type = 6;
+}
+message CloudTestBotDataMsg {
+  optional uint32 blower = 1;
+  optional uint32 main_brush = 2;
+  optional uint32 side_brush = 3;
+  optional uint32 water_pump = 4;
+}
+message CloudBotInfoDataMsg {
+  optional string bot_version = 1;
+  optional bool support_mopping = 2;
+  optional uint32 water_pump_status = 3;
+  optional uint32 mop_rack_status = 4;
+  optional bool water_shortage = 5;
+}
+message CloudUpdateFirmwareParamDataMsg {
+  optional bool is_end = 1;
+  optional bool result = 2;
+}
+message CloudSystemConfigDataMsg {
+  optional uint32 debug_log = 1;
+  optional string user_country = 2;
+  optional bool user_bind = 3;
+  optional bool enable_resume_clean = 4;
+}
+message CloudMotionDetectModeDataMsg {
+  optional uint32 mode = 1;
+}
+message CloudPerceptionResultDataMsg {
+  repeated bytes rgb_data = 1;
+  repeated bytes cg_data = 2;
+}
+message CloudRobotMoppingControlDataMsg {
+  optional int32 water_pump_duty = 1;
+  optional int32 water_pump_period = 2;
+}
+message CloudAppSwitchSystemConfigMsg {
+  message MapRobotSystemConfigEntry {
+    optional string key = 1;
+    optional bool value = 2;
+  }
+  repeated trifo.proto.CloudAppSwitchSystemConfigMsg.MapRobotSystemConfigEntry map_robot_system_config = 1;
+}
+
+// ===== proto/cv_util_msg.proto  (from libtrifo_core_items.so, 395 bytes)
+// package trifo.proto
+message Mat {
+  optional uint32 row = 1;
+  optional uint32 col = 2;
+  optional uint32 type = 3;
+  optional bytes matrix = 4;
+}
+message VectorMsg {
+  optional int64 size = 1;
+  optional bytes vector = 2;
+}
+message CVRect2dMsg {
+  optional double width = 1;
+  optional double height = 2;
+  optional double y = 3;
+  optional double x = 4;
+}
+message CVVec3dMsg {
+  optional double val0 = 1;
+  optional double val1 = 2;
+  optional double val2 = 3;
+}
+message CvMatrixMsg {
+  optional uint64 rows = 1;
+  optional uint64 columns = 2;
+  optional uint64 type = 3;
+  optional bytes data = 4;
+}
+message CvVecMsg {
+  optional uint64 dimension = 1;
+  optional bytes data = 2;
+}
+
+// ===== proto/item_msg.proto  (from libtrifo_core_items.so, 8241 bytes)
+// package trifo.proto
+// import "proto/cloud_status_data_msg.proto";
+// import "proto/cv_util_msg.proto";
+// import "proto/map_msg.proto";
+// import "proto/obstacle_msg.proto";
+// import "proto/map_layer_msg.proto";
+// import "proto/planning_msg.proto";
+// import "proto/robot_utility_command_msg.proto";
+// import "proto/robot_status_data_msg.proto";
+// import "proto/semantic_mapping_msg.proto";
+// import "proto/sensor_data_msg.proto";
+enum SignalStatusType {
+  NEW = 0;
+  REPEAT = 1;
+  END = 2;
+}
+message Affine2DItemMsg {
+  optional double theta = 1;
+  optional double x = 2;
+  optional double y = 3;
+  optional int64 item_timestamp = 4;
+}
+message RoomSegmentationInfoMsg {
+  optional uint32 type = 1;
+  optional int32 type_index = 2;
+  optional string name = 3;
+  optional int32 index = 4;
+  repeated trifo.proto.Affine2DMsg contour = 5;
+  optional trifo.proto.Affine2DMsg seed = 6;
+  optional double rotation_angle = 7;
+  repeated trifo.proto.Affine2DMsg rotated_contour = 8;
+  optional trifo.proto.Affine2DMsg rotated_seed = 9;
+  optional uint32 selected = 10;
+}
+message RoomSegmentationItemMsg {
+  optional string request_timestamp = 1;
+  optional int32 map_id = 2;
+  optional int32 map_rows = 3;
+  optional int32 map_cols = 4;
+  optional int32 rotated_map_rows = 5;
+  optional int32 rotated_map_cols = 6;
+  optional double map_rotation_angle = 7;
+  optional double cell_size = 8;
+  optional trifo.proto.Affine2DMsg max_point = 9;
+  optional bool rotation_align_locked = 10;
+  optional trifo.proto.MultiLayerGridMapItemMsg multi_map_msg = 11;
+  repeated trifo.proto.Affine2DMsg beauty_map = 12;
+  repeated trifo.proto.RoomSegmentationInfoMsg rooms = 13;
+}
+message Pose2DItemMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double theta = 3;
+  optional uint32 status = 4;
+  optional int64 timestamp = 5;
+  optional string remote_info = 6;
+  optional int64 item_timestamp = 7;
+}
+message Pose5DItemMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double yaw = 3;
+  optional double roll = 4;
+  optional double pitch = 5;
+  optional uint32 status = 6;
+  optional int64 timestamp = 7;
+  optional string remote_info = 8;
+  optional int64 item_timestamp = 9;
+}
+message ManualControlInfoItemMsg {
+  optional uint32 command = 1;
+  repeated double wheel_speed = 2;
+  repeated trifo.proto.Affine2DMsg pose = 3;
+  repeated uint32 vertex_count = 4;
+  optional trifo.proto.RoomSegmentationItemMsg room_segmentation = 5;
+}
+message CloudStatusDataItemMsg {
+  optional trifo.proto.CloudModeSwitchDataMsg cloud_mode_switch = 1;
+  optional trifo.proto.CloudStreamStatusDataMsg stream_status = 2;
+  optional trifo.proto.ManualControlInfoItemMsg manual_cmd = 3;
+  optional trifo.proto.CloudBlowerModeDataMsg blower_mode = 4;
+  optional trifo.proto.CloudBlowerModeDataMsg manual_blower_mode = 5;
+  optional trifo.proto.CloudVoiceTypeDataMsg voice_type = 6;
+  optional trifo.proto.CloudVoiceTalkStatusDataMsg voice_talk_status = 7;
+  optional trifo.proto.CloudTestBotDataMsg test_bot = 8;
+  optional trifo.proto.CloudBotInfoDataMsg bot_info = 9;
+  optional trifo.proto.CloudUpdateFirmwareParamDataMsg ota_param_status = 10;
+  optional trifo.proto.CloudSystemConfigDataMsg system_config = 11;
+  optional trifo.proto.CloudMotionDetectModeDataMsg motion_detect_mode = 12;
+  optional trifo.proto.CloudRobotMoppingControlDataMsg robot_mopping_control = 13;
+  optional trifo.proto.CloudRobotMoppingControlDataMsg robot_manual_mopping_control = 14;
+  optional trifo.proto.CloudAppSwitchSystemConfigMsg app_switch_system_config = 15;
+}
+message MultiLayerGridMapItemMsg {
+  message IdToMapsEntry {
+    optional string key = 1;
+    optional trifo.proto.MapLayerMsg value = 2;
+  }
+  repeated int32 id = 1;
+  optional trifo.proto.Pose2DMsg local_pose = 2;
+  repeated trifo.proto.MultiLayerGridMapItemMsg.IdToMapsEntry id_to_maps = 3;
+  optional int64 timestamp = 4;
+  optional string remote_info = 5;
+}
+message ListOfMultiLayerGridMapItemMsg {
+  message IdToMapsEntry {
+    optional string key = 1;
+    optional trifo.proto.MultiLayerGridMapItemMsg value = 2;
+  }
+  repeated trifo.proto.ListOfMultiLayerGridMapItemMsg.IdToMapsEntry id_to_maps = 1;
+  optional string remote_info = 2;
+}
+message PlanningLayerItemMsg {
+  repeated trifo.proto.SubmapMsg submaps = 1;
+  repeated trifo.proto.SubmapPoseMsg submap_pose = 2;
+}
+message ModeSwitchCommandItemMsg {
+  repeated uint32 commands = 1;
+  optional trifo.proto.SignalStatusType status = 2;
+  optional int64 item_timestamp = 3;
+}
+message StateTypeItemMsg {
+  repeated uint32 states = 1;
+  optional string remote_info = 2;
+  optional int64 item_timestamp = 3;
+}
+message SensorDataItemMsg {
+  message DataMapEntry {
+    optional int32 key = 1;
+    optional trifo.proto.DataMsg value = 2;
+  }
+  repeated trifo.proto.SensorDataItemMsg.DataMapEntry data_map = 1;
+  optional int64 data_frame_timestamp_ms = 2;
+  optional int64 item_timestamp = 3;
+  optional string remote_info = 4;
+}
+message RobotCommandItemMsg {
+  optional int64 item_timestamp = 1;
+  optional uint32 type = 2;
+  optional uint32 direction = 3;
+  optional double velocity = 4;
+  optional double delta = 5;
+  optional double duration = 6;
+  optional double theta = 7;
+}
+message WheelCommandItemMsg {
+  optional int64 item_timestamp = 1;
+  optional double velocity_left = 2;
+  optional double velocity_right = 3;
+}
+message PlannerControlInfoItemMsg {
+  optional int32 command = 1;
+  optional double wheel_speed = 2;
+  optional double left_wheel_speed = 3;
+  optional double right_wheel_speed = 4;
+  optional double x = 5;
+  optional double y = 6;
+  optional double theta = 7;
+  optional int64 item_timestamp = 8;
+}
+message PathItemMsg {
+  optional int64 item_timestamp = 1;
+  optional int64 num_of_bytes = 2;
+  optional bytes poses = 3;
+  optional string remote_info = 4;
+}
+message FrontierItemMsg {
+  optional uint64 item_timestamp = 1;
+  optional trifo.proto.Affine2DMsg centroid = 2;
+  optional trifo.proto.VectorMsg idx = 3;
+  optional trifo.proto.VectorMsg occupied = 4;
+  optional string remote_info = 5;
+}
+message ObjectsItemMsg {
+  optional trifo.proto.ObjectsGroupMsg detected_objects_group = 1;
+  optional int64 timestamp = 2;
+}
+message BarrierItemMsg {
+  message BarriersEntry {
+    optional int32 key = 1;
+    optional trifo.proto.VectorMsg value = 2;
+  }
+  optional double bin_size = 1;
+  optional uint32 num_bins = 2;
+  repeated trifo.proto.BarrierItemMsg.BarriersEntry barriers = 3;
+  optional int64 item_timestamp = 4;
+  optional int64 data_timestamp = 5;
+  optional string remote_info = 6;
+}
+message MapperControlInfoItemMsg {
+  optional uint32 command = 1;
+  optional uint32 response = 2;
+  optional int32 trajectory_id = 3;
+  optional int32 submap_index = 4;
+  repeated string map_path = 5;
+  optional int64 map_timestamp = 6;
+}
+message CameraResponseItemMsg {
+  repeated int32 responses = 1;
+}
+message CameraControlCommandItemMsg {
+  optional int32 command = 1;
+  optional int64 item_timestamp = 2;
+  optional trifo.proto.CameraResponseItemMsg response = 3;
+}
+message MotionCommandItemMsg {
+  optional trifo.proto.MoveCommandMsg move_msg = 1;
+  optional trifo.proto.RotateCommandMsg rotate_msg = 2;
+  optional trifo.proto.WallFollowCommandMsg wall_follow_msg = 3;
+  optional trifo.proto.StopCommandMsg stop_msg = 4;
+  optional trifo.proto.DockCommandMsg dock_msg = 5;
+  optional trifo.proto.TargetPoseCommandMsg target_pose_msg = 6;
+  optional trifo.proto.VelocityCommandMsg velocity_msg = 7;
+  optional trifo.proto.BotResponseDataMsg motion_response = 8;
+}
+message MapItemMsg {
+  optional trifo.proto.OccupancyGridMapMsg ogm_msg = 1;
+  optional trifo.proto.SparseMapMsg sparse_map_msg = 2;
+  optional trifo.proto.MultiSparseMapMsg multi_sparse_msg = 3;
+  optional int64 item_timestamp = 4;
+  optional string remote_info = 5;
+}
+message CleanStatusItemMsg {
+  optional double clean_area = 1;
+  optional uint64 clean_time = 2;
+  optional trifo.proto.Pose2DMsg charger_location = 3;
+  optional int64 item_timestamp = 4;
+  optional uint32 clean_type = 5;
+}
+message RobotUtilityCommandItemMsg {
+  repeated trifo.proto.RobotUtilityCommandMsg robot_utility_command = 1;
+}
+message RobotStatusDataItemMsg {
+  message DataMapEntry {
+    optional int32 key = 1;
+    optional trifo.proto.RobotStatusDataMsg value = 2;
+  }
+  repeated trifo.proto.RobotStatusDataItemMsg.DataMapEntry data_map = 1;
+  optional string remote_info = 2;
+}
+message DockDataItemMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double theta = 3;
+  optional int32 robot_relative_position = 4;
+  optional double reprojection_error = 5;
+  optional int32 blob_area = 6;
+  optional double blob_centroid = 7;
+  optional double blob_distance = 8;
+  optional int64 timestamp = 9;
+}
+message SegmentResultItemMsg {
+  optional int64 timestamp = 1;
+  optional trifo.proto.Mat segment_map = 2;
+  optional trifo.proto.VectorMsg segment_idx = 3;
+}
+message DetectResultItemMsg {
+  optional int64 timestamp = 1;
+  optional uint32 image_size_width = 2;
+  optional uint32 image_size_height = 3;
+  optional trifo.proto.VectorMsg rect = 4;
+  optional trifo.proto.VectorMsg class_id = 5;
+  optional trifo.proto.VectorMsg scores = 6;
+}
+message PerceptResultItemMsg {
+  optional trifo.proto.SegmentResultItemMsg segment_msg = 1;
+  optional trifo.proto.DetectResultItemMsg detect_msg = 2;
+  optional string remote_info = 3;
+}
+message CalibrateDataItemMsg {
+  optional int32 group_id = 1;
+  optional int32 sub_group_id = 2;
+  optional int32 attribute = 3;
+  optional bool response = 4;
+  optional int32 payload_length = 5;
+  optional bytes payload = 6;
+  optional int64 item_timestamp = 7;
+}
+message CameraCalibInfoItemMsg {
+  optional trifo.proto.Mat rgb_intrinsic = 1;
+  optional trifo.proto.Mat depth_intrinsic = 2;
+  optional trifo.proto.Mat rgb_distortion = 3;
+  optional trifo.proto.Mat depth_distortion = 4;
+  optional trifo.proto.Mat rgb_T_depth = 5;
+}
+message RobotPositionInfoItemMsg {
+  optional trifo.proto.Pose2DItemMsg robot_pos = 1;
+  optional trifo.proto.Pose2DItemMsg charger_pos = 2;
+}
+message ManualControllerInfoItemMsg {
+  optional int32 command = 1;
+  repeated string info = 2;
+  optional string remote_info = 3;
+}
+message WifiCfgDataMsg {
+  optional uint32 wifi_cmd = 1;
+  optional string wifi_ssid = 2;
+  optional string wifi_pwd = 3;
+  optional int64 item_timestamp = 4;
+}
+message WifiCfgResultDataMsg {
+  optional uint32 wifi_cmd = 1;
+  optional uint32 wifi_status = 2;
+  optional string wifi_ssid = 3;
+  optional int64 item_timestamp = 4;
+}
+message BBoxPointMsg {
+  optional double x = 1;
+  optional double y = 2;
+}
+message BoxMsg {
+  repeated trifo.proto.BBoxPointMsg points = 1;
+}
+message BBoxesMsg {
+  repeated trifo.proto.BoxMsg boxes = 1;
+}
+message SemanticInstancesItemMsg {
+  message InstancesEntry {
+    optional string key = 1;
+    optional trifo.proto.BBoxesMsg value = 2;
+  }
+  repeated trifo.proto.SemanticInstancesItemMsg.InstancesEntry instances = 1;
+  optional int64 map_timestamp = 2;
+  optional string pose_graph_name = 3;
+  optional int64 item_timestamp = 4;
+}
+
+// ===== proto/map_layer_msg.proto  (from libtrifo_core_items.so, 2432 bytes)
+// package trifo.proto
+message GridMsg {
+  optional double cell_size = 1;
+  optional int32 height = 2;
+  optional int32 width = 3;
+  optional double max_x = 4;
+  optional double max_y = 5;
+  optional bytes data = 6;
+}
+message SparseGridMsg {
+  optional double cell_size = 1;
+  optional int32 height = 2;
+  optional int32 width = 3;
+  optional double max_x = 4;
+  optional double max_y = 5;
+  optional bytes data = 6;
+}
+message Pose2DMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double theta = 3;
+  optional uint32 status = 4;
+  optional uint64 timestamp = 5;
+}
+message Affine2DMsg {
+  optional double theta = 1;
+  optional double x = 2;
+  optional double y = 3;
+}
+message BarrierMapMsg {
+  optional trifo.proto.GridMsg barrier_map = 1;
+  optional double charger_pose_x = 2;
+  optional double charger_pose_y = 3;
+  optional double charger_pose_theta = 4;
+  optional double new_detected_charger_pose_x = 5;
+  optional double new_detected_charger_pose_y = 6;
+  optional double new_detected_charger_pose_theta = 7;
+  optional int32 detect_another_charger_times = 8;
+  optional bool charger_updated = 9;
+}
+message SparseBarrierMapMsg {
+  optional trifo.proto.SparseGridMsg sparse_barrier_map = 1;
+  optional double charger_pose_x = 2;
+  optional double charger_pose_y = 3;
+  optional double charger_pose_theta = 4;
+  optional double new_detected_charger_pose_x = 5;
+  optional double new_detected_charger_pose_y = 6;
+  optional double new_detected_charger_pose_theta = 7;
+  optional int32 detect_another_charger_times = 8;
+  optional bool charger_updated = 9;
+}
+message OccupancyGridMsg {
+  optional trifo.proto.GridMsg occupancy_grid_map = 1;
+}
+message OccupancyStatusGridMsg {
+  optional trifo.proto.GridMsg occupancy_status_grid_map = 1;
+}
+message RoomSegmentationLayerMsg {
+  message RoomIdToClassEntry {
+    optional uint32 key = 1;
+    optional uint32 value = 2;
+  }
+  optional trifo.proto.GridMsg room_seg_grid_map = 1;
+  optional int32 num_room = 2;
+  optional float viz_rotate_angle = 3;
+  repeated trifo.proto.RoomSegmentationLayerMsg.RoomIdToClassEntry room_id_to_class = 4;
+}
+message ScanMapMsg {
+  optional trifo.proto.GridMsg scan_map = 1;
+  optional double align_angle = 2;
+  optional uint64 timestamp = 3;
+}
+message SemanticLayerMsg {
+  optional trifo.proto.GridMsg semantic_label_grid_map = 1;
+}
+message MapLayerMsg {
+  optional trifo.proto.BarrierMapMsg barrier_map_msg = 1;
+  optional trifo.proto.OccupancyGridMsg occupancy_grid_msg = 2;
+  optional trifo.proto.OccupancyStatusGridMsg occupancy_status_msg = 3;
+  optional trifo.proto.RoomSegmentationLayerMsg room_seg_layer_msg = 4;
+  optional trifo.proto.ScanMapMsg scan_map_msg = 5;
+  optional trifo.proto.SemanticLayerMsg semantic_layer_msg = 6;
+  optional trifo.proto.SparseBarrierMapMsg sparse_barrier_map_msg = 7;
+}
+message SubmapMsg {
+  message IdToMapsEntry {
+    optional string key = 1;
+    optional trifo.proto.MapLayerMsg value = 2;
+  }
+  optional int32 trajectory_id = 1;
+  optional int32 submap_index = 2;
+  optional trifo.proto.Pose2DMsg local_pose = 3;
+  repeated trifo.proto.SubmapMsg.IdToMapsEntry id_to_maps = 4;
+}
+message SubmapPoseMsg {
+  optional int32 trajectory_id = 1;
+  optional int32 submap_index = 2;
+  optional trifo.proto.Pose2DMsg global_pose = 3;
+}
+
+// ===== proto/map_msg.proto  (from libtrifo_core_items.so, 1707 bytes)
+// package trifo.proto
+// import "proto/cv_util_msg.proto";
+message PoseMsg {
+  optional trifo.proto.CvMatrixMsg rig_T_map = 1;
+  optional trifo.proto.CvMatrixMsg covariance = 2;
+}
+message DescriptorMsg {
+  optional int32 type = 1;
+  optional int64 length = 2;
+  optional bytes values = 3;
+}
+message FeatureMsg {
+  optional trifo.proto.CvVecMsg location = 1;
+  optional trifo.proto.CvMatrixMsg covariance = 2;
+  optional trifo.proto.DescriptorMsg descriptor_msg = 3;
+}
+message FrameMsg {
+  message FeaturesEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.FeatureMsg value = 2;
+  }
+  optional uint64 timestamp = 1;
+  repeated trifo.proto.FrameMsg.FeaturesEntry features = 2;
+}
+message RigMsg {
+  message FramesEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.FrameMsg value = 2;
+  }
+  optional uint64 timestamp = 2;
+  optional trifo.proto.PoseMsg rig_pose = 3;
+  repeated trifo.proto.RigMsg.FramesEntry frames = 4;
+}
+message PointMsg {
+  optional trifo.proto.CvVecMsg location = 1;
+  optional trifo.proto.CvMatrixMsg covariance = 2;
+}
+message ObservationMsg {
+  optional uint64 point_id = 1;
+  optional uint64 rig_id = 2;
+  optional uint64 frame_id = 3;
+  optional uint64 feature_id = 4;
+}
+message SparseMapMsg {
+  message RigsEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.RigMsg value = 2;
+  }
+  message PointsEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.PointMsg value = 2;
+  }
+  repeated trifo.proto.SparseMapMsg.RigsEntry rigs = 1;
+  repeated trifo.proto.SparseMapMsg.PointsEntry points = 2;
+  repeated trifo.proto.ObservationMsg observations = 3;
+}
+message MultiSparseMapMsg {
+  message IdToGlobalTMapsEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.CvMatrixMsg value = 2;
+  }
+  message IdToMapsEntry {
+    optional uint64 key = 1;
+    optional trifo.proto.SparseMapMsg value = 2;
+  }
+  repeated trifo.proto.MultiSparseMapMsg.IdToGlobalTMapsEntry id_to_global_T_maps = 1;
+  repeated trifo.proto.MultiSparseMapMsg.IdToMapsEntry id_to_maps = 2;
+}
+message OccupancyGridMapMsg {
+  optional double cell_size = 1;
+  optional int64 height = 2;
+  optional int64 width = 3;
+  optional int32 num_of_known_cells = 4;
+  optional bytes known_cells = 5;
+  optional bytes known_index = 6;
+}
+
+// ===== proto/node_msg.proto  (from libtrifo_core_items.so, 2484 bytes)
+// package trifo.proto
+// import "proto/item_msg.proto";
+enum ServiceMsgType {
+  MSG_INVALID_TYPE = 0;
+  MSG_SYSTEM_STATUS = 1;
+  MSG_SYSTEM_MODE = 2;
+}
+enum RequestAttribute {
+  OVERWRITE = 0;
+  APPEND = 1;
+  REPLY_ACK = 2;
+}
+enum RequestType {
+  ACT = 0;
+  CANCEL = 1;
+}
+enum ReplyAttribute {
+  ACK = 0;
+  STATUS = 1;
+  RESULT = 2;
+  OW_CANCEL = 3;
+}
+message InvalidMsg {
+  optional uint32 data_size = 1;
+  optional bytes bytes_data = 2;
+}
+message SystemStatusMsg {
+  enum SystemStatusType {
+    INFORMATION = 0;
+    TERMINATE = 1;
+    HEARTBEAT = 2;
+  }
+  optional trifo.proto.SystemStatusMsg.SystemStatusType status = 1;
+  optional uint32 pid = 2;
+}
+message CommandStatusMsg {
+  enum CommandStatusType {
+    FAILED = 0;
+    SUCCEED = 1;
+  }
+  optional trifo.proto.CommandStatusMsg.CommandStatusType status = 1;
+}
+message SystemModeMsg {
+  enum SystemModeType {
+    SIGNAL = 0;
+    STATE = 1;
+  }
+  optional trifo.proto.SystemModeMsg.SystemModeType mode = 1;
+  optional trifo.proto.ModeSwitchCommandItemMsg signal = 2;
+  optional trifo.proto.StateTypeItemMsg state = 3;
+}
+message ServiceMsg {
+  optional trifo.proto.ServiceMsgType type = 1;
+  optional trifo.proto.SystemStatusMsg system_status = 2;
+  optional trifo.proto.SystemModeMsg system_mode = 3;
+  optional trifo.proto.MotionCommandItemMsg motion_command = 4;
+  optional trifo.proto.RobotUtilityCommandItemMsg robot_utility_command = 5;
+  optional trifo.proto.MapperControlInfoItemMsg mapper_control_info = 6;
+  optional trifo.proto.InvalidMsg test_msg = 7;
+  optional trifo.proto.CloudStatusDataItemMsg cloud_status = 8;
+  optional trifo.proto.Pose2DItemMsg reloc_result = 9;
+  optional trifo.proto.CalibrateDataItemMsg calibrate_data = 10;
+  optional trifo.proto.PlanningLayerItemMsg planning_layer = 11;
+  optional trifo.proto.CameraControlCommandItemMsg camera_control_info = 12;
+  optional trifo.proto.SensorDataItemMsg sensor_data_msg = 13;
+  optional trifo.proto.CameraCalibInfoItemMsg camera_calib_info = 14;
+  optional trifo.proto.CommandStatusMsg command_status = 15;
+  optional trifo.proto.ManualControllerInfoItemMsg manual_controller_info = 16;
+  optional trifo.proto.ManualControlInfoItemMsg manual_control_info = 17;
+  optional trifo.proto.MultiLayerGridMapItemMsg multilayer_grid_map = 18;
+  optional trifo.proto.ListOfMultiLayerGridMapItemMsg list_of_multilayer_grid_map = 19;
+}
+message RPCRequestBase {
+  optional uint32 id = 1;
+  optional trifo.proto.RequestType type = 2;
+  optional trifo.proto.RequestAttribute attribute = 3;
+  optional uint32 priority = 4;
+  optional uint32 debug_id = 5;
+  optional uint32 send_node_id = 6;
+  optional uint64 timestamp = 7;
+  optional trifo.proto.ServiceMsg payload = 8;
+}
+message RPCReplyBase {
+  optional uint32 req_id = 1;
+  optional trifo.proto.ReplyAttribute attribute = 2;
+  optional uint64 timestamp = 3;
+  optional trifo.proto.ServiceMsg payload = 4;
+}
+
+// ===== proto/obstacle_msg.proto  (from libtrifo_core_items.so, 340 bytes)
+// package trifo.proto
+// import "proto/cv_util_msg.proto";
+message DetectedObjectMsg {
+  optional int32 id = 1;
+  optional string class_name = 2;
+  optional trifo.proto.CVRect2dMsg bounding_box = 3;
+  optional trifo.proto.CVVec3dMsg normal_vec = 4;
+  optional float distance = 5;
+  optional float score = 6;
+}
+message ObjectsGroupMsg {
+  optional trifo.proto.VectorMsg detected_objects = 1;
+  optional int64 timestamp = 2;
+}
+
+// ===== proto/planning_msg.proto  (from libtrifo_core_items.so, 720 bytes)
+// package trifo.proto
+message MoveCommandMsg {
+  optional int32 direction = 1;
+  optional float wheel_speed = 2;
+  optional float distance = 3;
+  optional float target_heading = 4;
+  optional bool default_heading = 5;
+  optional uint32 command_id = 6;
+}
+message TargetPoseCommandMsg {
+  optional float wheel_speed = 1;
+  optional float target_x = 2;
+  optional float target_y = 3;
+  optional uint32 command_id = 4;
+}
+message RotateCommandMsg {
+  optional int32 heading_type = 1;
+  optional float left_nominal_speed = 2;
+  optional float right_nominal_speed = 3;
+  optional float target_heading = 4;
+  optional uint32 command_id = 5;
+}
+message VelocityCommandMsg {
+  optional float left_nominal_speed = 1;
+  optional float right_nominal_speed = 2;
+  optional uint64 maintain_time = 3;
+  optional uint32 command_id = 4;
+}
+message WallFollowCommandMsg {
+  optional int32 direction = 1;
+  optional float wheel_speed = 2;
+  optional uint32 command_id = 3;
+}
+message StopCommandMsg {
+  optional uint32 command_id = 1;
+}
+message DockCommandMsg {
+  optional uint32 command_id = 1;
+}
+
+// ===== proto/robot_status_data_msg.proto  (from libtrifo_core_items.so, 585 bytes)
+// package trifo.proto
+message BatteryDataMsg {
+  optional float voltage = 1;
+  optional int32 charging_status = 2;
+}
+message BotExceptionDataMsg {
+  repeated int32 exception_code = 1;
+}
+message ButtonDataMsg {
+  optional uint32 button_id = 1;
+  optional uint32 motion = 2;
+}
+message ResetGyroResponseMsg {
+  optional uint32 state = 1;
+}
+message RobotPowerOnStateMsg {
+  optional uint32 state = 1;
+}
+message RobotStatusDataMsg {
+  optional trifo.proto.BatteryDataMsg battery = 1;
+  optional trifo.proto.BotExceptionDataMsg exception = 2;
+  optional trifo.proto.ButtonDataMsg button = 3;
+  optional trifo.proto.ResetGyroResponseMsg gyro = 4;
+  optional trifo.proto.RobotPowerOnStateMsg power_on_state = 5;
+}
+
+// ===== proto/robot_utility_command_msg.proto  (from libtrifo_core_items.so, 1036 bytes)
+// package trifo.proto
+message RobotVoiceCommandMsg {
+  optional uint32 command = 1;
+  optional uint32 value = 2;
+}
+message RobotLightCommandMsg {
+  optional uint32 light_id = 1;
+  optional uint32 mode = 2;
+}
+message RobotCleanMotorCommandMsg {
+  optional uint32 motor_id = 1;
+  optional uint32 duty_cycle = 2;
+}
+message RobotVoiceTalkCommandMsg {
+  optional uint32 talk_status = 1;
+  optional string talk_id = 2;
+  optional string stream_domain = 3;
+  optional string stream_key = 4;
+  optional string app_name = 5;
+  optional uint32 stream_cloud_type = 6;
+}
+message RobotCalibrateCommandMsg {
+  optional uint32 command = 1;
+}
+message RobotControlCommandMsg {
+  optional uint32 command = 1;
+  optional uint32 state = 2;
+}
+message RobotCameraSyncCommandMsg {
+  optional uint32 type = 1;
+}
+message RobotUtilityCommandMsg {
+  optional uint32 type = 1;
+  optional uint32 id = 99;
+  optional trifo.proto.RobotVoiceCommandMsg voice_msg = 2;
+  optional trifo.proto.RobotCleanMotorCommandMsg motor_msg = 3;
+  optional trifo.proto.RobotLightCommandMsg light_msg = 4;
+  optional trifo.proto.RobotVoiceTalkCommandMsg voice_talk_msg = 5;
+  optional trifo.proto.RobotCalibrateCommandMsg calibrate_msg = 6;
+  optional trifo.proto.RobotControlCommandMsg robot_control_msg = 7;
+  optional trifo.proto.RobotCameraSyncCommandMsg camera_sync_msg = 8;
+}
+
+// ===== proto/semantic_mapping_msg.proto  (from libtrifo_core_items.so, 1625 bytes)
+// package trifo.proto
+// import "proto/map_layer_msg.proto";
+message _BlockProto {
+  optional int32 voxels_per_side = 1;
+  optional double voxel_size = 2;
+  optional double origin_x = 3;
+  optional double origin_y = 4;
+  optional double origin_z = 5;
+  optional bool has_data = 6;
+  repeated uint32 voxel_data = 7;
+}
+message LabelCountMsg {
+  optional uint32 label = 1;
+  optional uint32 label_confidence = 2;
+}
+message LabelVoxelMsg {
+  optional uint32 label = 1;
+  optional uint32 label_confidence = 2;
+  optional uint32 label_count_size = 3;
+  repeated trifo.proto.LabelCountMsg label_count_array = 4;
+}
+message LabelVoxelBlockMsg {
+  optional int32 voxels_per_side = 1;
+  optional double voxel_size = 2;
+  optional double origin_x = 3;
+  optional double origin_y = 4;
+  optional double origin_z = 5;
+  optional bool has_data = 6;
+  repeated trifo.proto.LabelVoxelMsg label_voxel_data = 7;
+}
+message _LayerProto {
+  optional double voxel_size = 1;
+  optional uint32 voxels_per_side = 2;
+  optional string type = 3;
+}
+message LabelCountHashmapMsg {
+  message LabelCountEntry {
+    optional uint32 key = 1;
+    optional uint32 value = 2;
+  }
+  repeated trifo.proto.LabelCountHashmapMsg.LabelCountEntry label_count = 1;
+}
+message LabelCountFloatMsg {
+  message LabelCountFloatEntry {
+    optional uint32 key = 1;
+    optional float value = 2;
+  }
+  repeated trifo.proto.LabelCountFloatMsg.LabelCountFloatEntry label_count_float = 1;
+}
+message SemanticMapperMsg {
+  message LabelCategoryCountEntry {
+    optional uint32 key = 1;
+    optional trifo.proto.LabelCountFloatMsg value = 2;
+  }
+  repeated trifo.proto.SemanticMapperMsg.LabelCategoryCountEntry label_category_count = 1;
+}
+message GSMControllerMsg {
+  message LabelPairwiseCountHashmapEntry {
+    optional uint32 key = 1;
+    optional trifo.proto.LabelCountHashmapMsg value = 2;
+  }
+  optional trifo.proto.LabelCountHashmapMsg label_count_hashmap = 1;
+  repeated trifo.proto.GSMControllerMsg.LabelPairwiseCountHashmapEntry label_pairwise_count_hashmap = 2;
+  optional string label_layer_checkpoint_path = 3;
+  optional string tsdf_layer_checkpoint_path = 4;
+  optional trifo.proto.SemanticMapperMsg semantic_mapper = 5;
+}
+
+// ===== proto/sensor_data_msg.proto  (from libtrifo_core_items.so, 2287 bytes)
+// package trifo.proto
+// import "proto/cv_util_msg.proto";
+message ImageDataMsg {
+  optional trifo.proto.Mat mat = 1;
+}
+message ImageYUVDataMsg {
+  optional int32 width = 1;
+  optional int32 height = 2;
+  optional bytes data = 3;
+}
+message PointCloudMsg {
+  optional trifo.proto.VectorMsg points = 1;
+  optional trifo.proto.VectorMsg normals = 2;
+  optional trifo.proto.VectorMsg colors = 3;
+}
+message DepthDataMsg {
+  optional trifo.proto.Mat depth = 1;
+  optional trifo.proto.Mat color = 2;
+  optional trifo.proto.Mat intensity = 3;
+  optional trifo.proto.PointCloudMsg point_cloud = 4;
+  optional trifo.proto.Mat cr_intensity = 5;
+  optional trifo.proto.Mat cg_intensity = 6;
+  optional trifo.proto.VectorMsg raw_point_cloud = 7;
+  optional trifo.proto.VectorMsg confidence = 8;
+}
+message ImuDataMsg {
+  optional double accel_x = 1;
+  optional double accel_y = 2;
+  optional double accel_z = 3;
+  optional double gyro_x = 4;
+  optional double gyro_y = 5;
+  optional double gyro_z = 6;
+  optional uint64 timestamp_ms_accel = 7;
+  optional uint64 timestamp_ms_gyro = 8;
+}
+message Pose2dDataMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double theta = 3;
+  optional int32 pose_state = 4;
+}
+message Pose5dDataMsg {
+  optional double x = 1;
+  optional double y = 2;
+  optional double yaw = 3;
+  optional double roll = 4;
+  optional double pitch = 5;
+  optional int32 pose_state = 6;
+}
+message BotResponseDataMsg {
+  optional int32 command_id = 1;
+  optional int32 response = 2;
+}
+message RangeDataMsg {
+  optional double radius = 1;
+}
+message ModeDataMsg {
+  optional int32 mode = 1;
+}
+message BotStatusDataMsg {
+  optional float x = 1;
+  optional float y = 2;
+  optional float yaw = 3;
+  optional float roll = 4;
+  optional float pitch = 5;
+  optional int64 timestamp = 6;
+  repeated int32 terrain_sensor_status = 7;
+}
+message AudioPCMDataMsg {
+  optional int32 size = 1;
+  optional bytes data = 2;
+}
+message CameraSyncDataMsg {
+  optional uint64 baseplate_timestamp_ms = 1;
+  optional int32 id = 2;
+  optional uint32 count = 3;
+  optional float x = 4;
+  optional float y = 5;
+  optional float yaw = 6;
+  optional float roll = 7;
+  optional float pitch = 8;
+}
+message WheelDataMsg {
+  optional float theta = 1;
+  optional double left = 2;
+  optional double right = 3;
+  optional uint64 timestamp_ms = 4;
+}
+message CameraH264DataMsg {
+  optional int32 size = 1;
+  optional bytes data = 2;
+  optional int32 type = 3;
+}
+message DataMsg {
+  optional trifo.proto.ImageDataMsg image = 1;
+  optional trifo.proto.ImuDataMsg imu = 2;
+  optional trifo.proto.DepthDataMsg depth = 3;
+  optional trifo.proto.Pose2dDataMsg pose2d = 4;
+  optional trifo.proto.Pose5dDataMsg pose5d = 5;
+  optional trifo.proto.BotResponseDataMsg motion_response = 6;
+  optional trifo.proto.RangeDataMsg range_data = 7;
+  optional trifo.proto.ImageYUVDataMsg image_yuv = 8;
+  optional trifo.proto.BotStatusDataMsg bot_status_data = 9;
+  optional trifo.proto.AudioPCMDataMsg audio_pcm_data = 10;
+  optional trifo.proto.CameraSyncDataMsg camera_sync_data = 11;
+  optional trifo.proto.WheelDataMsg wheel_data = 12;
+  optional trifo.proto.CameraH264DataMsg camera_h264_data = 13;
+}
+
+// ===== imgproc/proto/bag_of_words.proto  (from libtrifo_core_common.so, 383 bytes)
+// package trifo.imgproc.proto
+message BagOfWords {
+  message WordsEntry {
+    optional uint64 key = 1;
+    optional double value = 2;
+  }
+  optional int32 norm = 1;
+  repeated trifo.imgproc.proto.BagOfWords.WordsEntry words = 2;
+  optional bool is_normalized = 3;
+}
+message BOWDataBase {
+  message IdToBowEntry {
+    optional uint64 key = 1;
+    optional trifo.imgproc.proto.BagOfWords value = 2;
+  }
+  repeated trifo.imgproc.proto.BOWDataBase.IdToBowEntry id_to_bow = 1;
+}
+
+// ===== util/proto/grid_map.proto  (from libtrifo_core_common.so, 173 bytes)
+// package trifo.proto
+message GridDoubleMsg {
+  optional double cell_size = 1;
+  optional int64 height = 2;
+  optional int64 width = 3;
+  optional double max_x = 4;
+  optional double max_y = 5;
+  optional int32 type = 7;
+  optional bytes data = 8;
+}
+

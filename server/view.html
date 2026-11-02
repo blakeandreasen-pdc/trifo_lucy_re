@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0b">
+<title>Lucy</title>
+<style>
+ /* Lucy: black + yellow, with teal (on/OK), coral (stop/danger) and sky blue (info). Mobile first;
+    two columns from 900 px. Redesigned 2026-10-26 (a nod to the old app's black and gold). */
+ :root { --bg:#0a0a0b; --card:#151619; --card2:#1e2025; --line:#2b2e35; --text:#f4f3ee; --mute:#8e919a;
+         --y:#ffd23f; --y2:#e6b800; --teal:#2ec4b6; --coral:#ff5a5f; --sky:#6cb8ff; --r:16px; }
+ * { box-sizing:border-box; }
+ html { -webkit-text-size-adjust:100%; }
+ body { background:var(--bg); color:var(--text); font:15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin:0; }
+ a { color:var(--sky); }
+ button, select, input { font:inherit; color:inherit; }
+ button { cursor:pointer; border:0; border-radius:12px; background:var(--card2); color:var(--text); padding:9px 14px;
+          transition:background .25s, box-shadow .4s, transform .08s; }
+ button:active { transform:scale(.97); }
+ button:disabled { opacity:.4; cursor:default; }
+ button.pressed { box-shadow:0 0 0 2px var(--sky) inset; }
+ button.ok { box-shadow:0 0 0 2px var(--teal) inset; }
+ button.bad { box-shadow:0 0 0 2px var(--coral) inset; }
+ input[type=text], input:not([type]), input[type=time], select { background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+ input[type=checkbox] { accent-color:var(--y); width:16px; height:16px; vertical-align:-3px; }
+ input[type=range] { accent-color:var(--y); width:100%; }
+ label { font-size:14px; }
+ .note { font-size:13px; color:var(--mute); }
+ .hidden { display:none !important; }
+
+ /* top bar */
+ header { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:10px; padding:10px 14px;
+          background:rgba(10,10,11,.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+ .logo { font-weight:900; letter-spacing:.18em; font-size:20px; color:var(--y); }
+ .chip { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; background:var(--card2); font-size:13px; white-space:nowrap; }
+ #nextchip { color:var(--mute); font-size:12px; padding:5px 9px; }
+ @media (max-width:420px) { header { gap:7px !important; padding-left:10px !important; padding-right:10px !important; } .chip { padding:5px 9px; } }
+ #nextchip:empty { display:none; }
+ /* the name (editable in Experimental) keeps LUCY's width: longer names shrink, then wrap */
+ .logo { display:inline-block; text-align:center; line-height:1.05; flex:0 0 auto; }
+ .dot { width:8px; height:8px; border-radius:50%; background:var(--mute); }
+ .dot.docked { background:var(--teal); } .dot.busy { background:var(--y); } .dot.err { background:var(--coral); }
+ .grow { flex:1; }
+ .pill { background:var(--y); color:#111; font-weight:800; border-radius:999px; padding:8px 16px; text-decoration:none; }
+
+ /* layout */
+ main { max-width:1180px; margin:0 auto; padding:12px; display:grid; gap:12px; grid-template-columns:1fr; }
+ @media (min-width:900px) { main { grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); align-items:start; }
+   .colL, .colR { display:grid; gap:12px; } .wide { grid-column:1 / -1; } }
+ @media (max-width:899px) { .colL, .colR { display:contents; } }
+ .card { background:var(--card); border-radius:var(--r); padding:12px; border:1px solid var(--line); min-width:0; }
+ .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:var(--y); margin:0 0 10px; font-weight:800; }
+ details.card > summary { list-style:none; cursor:pointer; font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:var(--y); font-weight:800;
+                          display:flex; align-items:center; gap:8px; }
+ details.card > summary::-webkit-details-marker { display:none; }
+ details.card > summary::before { content:'\25B8'; color:var(--mute); transition:transform .2s; }
+ details.card[open] > summary::before { transform:rotate(90deg); }
+ details.card[open] > summary { margin-bottom:10px; }
+ details.sub { margin-top:8px; }
+ details.sub > summary { cursor:pointer; color:var(--mute); font-size:13px; }
+ .row2 { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+
+ /* camera */
+ .cam { position:relative; border-radius:12px; overflow:hidden; background:#000; }
+ .cam + .cam { margin-top:8px; }
+ video { width:100%; display:block; background:#000; aspect-ratio:16/9; position:relative; z-index:0; }
+ #night { image-rendering:pixelated; }
+ svg.guide { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+ /* explicit layers: Firefox for Android draws playing video above unlayered siblings */
+ .camtools { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+ .seg { display:inline-flex; background:var(--card2); border-radius:999px; padding:3px; gap:2px; }
+ .seg button { background:transparent; padding:5px 11px; border-radius:999px; font-size:13px; }
+ .seg button.on { background:var(--y); color:#111; font-weight:700; }
+ #cam-native iframe { width:100%; aspect-ratio:16/9; border:0; display:block; background:#000; }
+ body.camoff #camcard .cam:not(#cam-native) { display:none; }
+ #camoffnote { display:none; }
+ body.camoff #camoffnote { display:block; }
+
+ /* Live panel: camera + live map (side by side on wide screens), then Say */
+ .livegrid { display:grid; gap:10px; grid-template-columns:1fr; }
+ @media (min-width:900px) { .livegrid { grid-template-columns:1fr 1fr; align-items:start; } }
+ #saybox { margin-top:10px; }
+ #liveseg { margin-bottom:10px; }
+ #liveseg button { padding:8px 14px; }
+ .livegrid.one { grid-template-columns:1fr !important; }
+ #drivecard { display:none; }
+ /* parking view */
+ #parkcard { position:relative; }
+ #parkcard .zoom { position:absolute; right:8px; top:8px; display:inline-flex; gap:6px; }
+ #parkcard .zoom button { background:rgba(30,32,37,.85); }
+ #park { background:#101113; border-radius:12px; display:block; width:100%; aspect-ratio:16/9; touch-action:none; }
+ .tools { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-top:8px; }
+ .tools button { padding:6px 12px; }
+ .sq { width:36px; padding:6px 0 !important; text-align:center; font-weight:700; }
+
+ /* actions */
+ .actions { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+ .actions button { padding:14px 6px; font-weight:700; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+ .actions button span { font-size:20px; line-height:1; }
+ .actions .primary { background:var(--y); color:#111; }
+ .actions .stop { background:#2a1718; color:#ff9b9e; }
+ .actions button.on { background:var(--teal); color:#062a27; }
+ .chips { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; scrollbar-width:thin; }
+ .chips button { flex:0 0 auto; padding:7px 11px; border-radius:999px; font-variant-numeric:tabular-nums; }
+ .chips button.on { background:var(--y); color:#111; font-weight:800; }
+ .chips button.fav { box-shadow:0 0 0 1px var(--y) inset; }
+ .lbl { font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.1em; margin:12px 0 6px; display:flex; justify-content:space-between; }
+
+ /* drive */
+ #stick { width:190px; height:190px; border-radius:50%; background:radial-gradient(circle, #23252b, #16171a); border:2px solid var(--line);
+          position:relative; touch-action:none; user-select:none; margin:6px auto; }
+ #stick::before, #stick::after { content:''; position:absolute; background:#2f323a; }
+ #stick::before { left:50%; top:10px; bottom:10px; width:1px; }
+ #stick::after { top:50%; left:10px; right:10px; height:1px; }
+ #knob { position:absolute; width:56px; height:56px; border-radius:50%; background:var(--y); left:65px; top:65px; z-index:1; box-shadow:0 4px 14px rgba(255,210,63,.35); }
+ #drivecard .note { text-align:center; }
+
+ /* map */
+ #mapcv { width:100%; max-width:760px; margin:0 auto; image-rendering:pixelated; background:#3c3c3c; border-radius:12px; display:block; }
+ .mapbar { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+ .mapseg { display:inline-flex; flex-wrap:wrap; gap:4px; }
+ .mapseg button { padding:6px 11px; border-radius:999px; font-size:13px; }
+ .mapseg button.on { background:var(--y); color:#111; font-weight:700; }
+ #zonetab, .slots table, #schedtab { border-collapse:collapse; font-size:14px; width:100%; }
+ #zonetab td, .slots td, #schedtab td { padding:6px 8px 6px 0; vertical-align:top; border-top:1px solid var(--line); }
+ .slots tr.auto td { color:var(--mute); }
+ .slotprev { width:110px; border-radius:8px; cursor:zoom-in; display:block; }
+ .slotprev.big { width:min(360px, 80vw); cursor:zoom-out; }
+ .slots button, #zonetab button, #schedtab button { padding:6px 10px; font-size:13px; }
+ .day { padding:6px 9px; border-radius:999px; font-size:13px; }
+ .day.on { background:var(--y); color:#111; font-weight:700; }
+ #cmdlog { font:11px ui-monospace, monospace; color:#9ab89a; background:#070708; border:1px solid var(--line); border-radius:10px; padding:6px 8px;
+           max-height:11em; overflow-y:auto; white-space:pre-wrap; margin-top:8px; }
+ pre.note { white-space:pre-wrap; }
+ #runlist { margin-top:6px; }
+ .seclist { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; margin-top:8px; }
+ .seclist figure { margin:0; cursor:zoom-in; }
+ .seclist img { width:100%; border-radius:8px; display:block; background:#000; }
+ .seclist figure.big { grid-column:1 / -1; cursor:zoom-out; }
+ .seclist figcaption { font-size:12px; color:var(--mute); margin-top:2px; }
+
+ /* driving mode (?drive): camera, live map, stick and Say only; no page scroll or zoom */
+ #exitdrive, #camtoggle, #dockfloat { display:none; }
+ body.drive { overflow:hidden; height:100dvh; touch-action:none; }
+ body.drive header, body.drive main > :not(#livecard):not(#drivecard):not(#saybox), body.drive #livecard > summary, body.drive #liveseg,
+ body.drive .camtools, body.drive #parkcard .tools, body.drive #parkcard .note, body.drive #drivecard .note,
+ body.drive #camoffnote { display:none !important; }
+ body.drive main { display:flex; flex-direction:column; height:100dvh; padding:6px; gap:6px; max-width:none; }
+ body.drive .card { padding:0; border:0; background:transparent; }
+ body.drive .livegrid { grid-template-columns:1fr; gap:6px; }
+ body.drive #drivecard { display:flex; flex:1 1 auto; align-items:center; justify-content:center; }
+ body.drive #saybox { flex:0 0 auto; margin:0 0 4px; }
+ body.drive #exitdrive { display:block; position:fixed; right:8px; top:8px; z-index:5; }
+ body.drive #camtoggle { display:inline-flex; position:fixed; left:50%; transform:translateX(-50%); top:8px; z-index:5; }
+ body.drive #dockfloat { display:block; position:fixed; left:8px; top:8px; z-index:5; }
+ body.drive #exitdrive, body.drive #camtoggle, body.drive #dockfloat { background:rgba(20,20,22,.85); }
+</style></head><body>
+<button id="exitdrive" onclick="location.search=''">Exit</button>
+<div id="camtoggle" class="seg"><button data-mode="main">Camera</button><button data-mode="night">Night</button><button data-mode="off">Off</button></div>
+<button id="dockfloat">Dock</button>
+<header>
+ <span class="logo" id="logo">LUCY</span>
+ <span class="chip" id="statchip" title="Her status, battery and suction (from her MQTT reports)"><span class="dot" id="statdot"></span><span id="stattext">...</span></span>
+ <span class="grow"></span>
+ <span class="chip" id="nextchip" title="Next scheduled run"></span>
+</header>
+<main>
+<details class="card wide" id="livecard">
+ <summary>Live</summary>
+ <div class="mapseg" id="liveseg"><button data-sec="cam">Camera</button><button data-sec="map">Live map</button><button data-sec="drive">Drive</button><button data-sec="say">Speak</button></div>
+ <div class="livegrid">
+<div id="camcard">
+  <div class="camtools"><span class="seg"><button data-mode="main">Camera</button><button data-mode="night">Night</button><button data-mode="both" title="Both at once makes the main camera stutter">Both</button><button data-mode="off">Off</button></span></div>
+  <div class="cam" id="cam-main">
+   <video id="main" muted autoplay playsinline></video>
+   <!-- Rough guide to where her body (~34 cm wide) will pass if she drives straight on. -->
+   <svg class="guide" id="guide" viewBox="0 0 100 100" preserveAspectRatio="none">
+    <polyline points="14,100 41,58" stroke="#ffd23f" stroke-width="0.6" fill="none" stroke-dasharray="2,1.5"/>
+    <polyline points="86,100 59,58" stroke="#ffd23f" stroke-width="0.6" fill="none" stroke-dasharray="2,1.5"/>
+   </svg>
+  </div>
+  <div class="cam" id="cam-night"><video id="night" muted autoplay playsinline></video></div>
+  <div class="cam hidden" id="cam-native">
+   <iframe id="native" allow="autoplay"></iframe>
+  </div>
+  <div class="note hidden" id="native-note" style="margin-top:6px"></div>
+  <div class="note" id="camoffnote">Camera off<span id="camoffwhy"></span>. <button data-mode="main" class="camon">Turn it on</button></div>
+ </div>
+<div id="parkcard">
+  <canvas id="park" width="300" height="300" title="Top-down: her body, her map and what the depth camera sees"></canvas>
+  <div class="tools">
+   <input type="checkbox" id="parkon" checked hidden>
+   <label id="liveonl"><input type="checkbox" id="liveon" checked> depth</label>
+   <label title="Keep re-fitting the map to what the camera sees (only moves this view, never Lucy)"><input type="checkbox" id="alignon"> auto-align</label>
+   <button id="realign" title="Line the map up with what the depth camera sees, once">Re-align</button>
+   <span class="grow"></span>
+   <span class="zoom"><button id="parkout" class="sq" title="zoom out">&minus;</button><button id="parkin" class="sq" title="zoom in">+</button></span>
+  </div>
+  <div class="note" style="margin-top:6px"><span id="parkinfo"></span></div>
+ </div>
+ </div>
+<div id="saybox">
+  <div class="row2">
+   <input id="saytext" maxlength="600" placeholder="Hello, I am Lucy" style="flex:1 1 220px">
+   <button id="saygo" style="background:var(--y);color:#111;font-weight:700">Say it</button>
+  </div>
+  <div class="row2" style="margin-top:8px">
+   <select id="sayvoice">
+    <option>en-GB-SoniaNeural</option><option>en-GB-RyanNeural</option><option>en-GB-LibbyNeural</option><option>en-GB-MaisieNeural</option>
+    <option>en-GB-ThomasNeural</option><option>en-IE-EmilyNeural</option><option>en-IE-ConnorNeural</option><option>en-AU-NatashaNeural</option>
+    <option>en-US-AriaNeural</option><option>en-US-GuyNeural</option>
+   </select>
+   <span class="note" id="sayout">Plays on her own speaker; takes ~15 s.</span>
+  </div>
+ </div>
+</details>
+<div class="colL">
+<section class="card" id="actcard">
+  <h2>Control</h2>
+  <div class="actions">
+   <button id="startbtn" class="primary"><span>&#9654;</span>Clean</button>
+   <button id="pausebtn"><span>&#10074;&#10074;</span>Pause</button>
+   <button id="dock"><span>&#8962;</span>Dock</button>
+   <button id="spot"><span>&#10227;</span>Spot</button>
+   <button id="locate"><span>&#128276;</span>Find me</button>
+   <button id="listen" title="Her own stream with the microphone (replaces the camera while on)"><span>&#127908;</span>Listen</button>
+  </div>
+  <div class="lbl"><span>Suction</span><span id="suctionnow"></span></div>
+  <div class="chips" id="suction"></div>
+  <div class="lbl"><span>Speaker volume</span><span id="volval"></span></div>
+  <input type="range" id="volume" min="0" max="100" step="5">
+  <div class="row2" style="margin-top:10px"><button id="manual" title="Hold her in manual mode (the joystick does this by itself)">Manual mode</button></div>
+ </section>
+</div>
+<div class="colR">
+<details class="card" id="schedcard">
+  <summary>Schedule</summary>
+  <div class="row2"><label><input type="checkbox" id="schedon"> schedule on</label> <span class="note" id="schednext"></span></div>
+  <table id="schedtab"></table>
+  <div class="lbl"><span>Add</span></div>
+  <div class="row2">
+   <input type="time" id="schedtime" value="11:00">
+   <select id="schedcmd"><option value="start">Clean everywhere</option><option value="zones:all">Clean all green zones</option>
+    <option value="zones">Clean chosen zones</option><option value="rooms">Clean chosen rooms</option><option value="dock">Dock</option>
+    <option value="security:on">Security on</option><option value="security:off">Security off</option></select>
+  </div>
+  <div class="row2 hidden" id="schedpick" style="margin-top:8px"></div>
+  <div class="row2" style="margin-top:8px"><span id="schedsuc" class="row2"><span class="note">Suction</span>
+   <select id="schedsuction"></select></span><span class="grow"></span>
+   <button id="schedadd" style="background:var(--y);color:#111;font-weight:700">Add</button></div>
+  <div class="row2" id="scheddays" style="margin-top:8px"></div>
+ </details>
+<details class="card" id="runscard">
+  <summary>Runs</summary>
+  <div class="row2"><span class="note grow" id="runsnote">One line per clean, from her own logs. Tap one for the detail.</span><button id="runsrefresh">Refresh</button></div>
+  <div id="runlist"></div>
+ </details>
+<details class="card" id="seccard">
+  <summary>Security</summary>
+  <div class="row2"><label><input type="checkbox" id="secon"> watch for movement</label><span class="grow"></span>
+   <label><input type="checkbox" id="secnotify"> Telegram me</label></div>
+  <div class="note" id="secnote">She stays on the dock, silently, and saves a few seconds of pictures (colour, then night vision; no sound) when something moves.</div>
+  <details class="sub"><summary>Phone alerts by ntfy</summary>
+   <div class="row2"><input id="ntfyin" placeholder="topic, e.g. lucy-alerts-x7k2p9" style="flex:1 1 200px"><button id="ntfysave">Save</button></div>
+   <div class="note">Install the free <b>ntfy</b> app, subscribe to the same topic, and alerts arrive as notifications (text only). Use a long, odd name: anyone who knows it can read it. Empty = off.</div>
+  </details>
+  <div id="seclist" class="seclist"></div>
+ </details>
+</div>
+<section class="card" id="drivecard">
+  <div id="stick" title="Drag to drive"><div id="knob"></div></div>
+  <div class="note">Drag the dot: up/down = speed, sideways = steer, sideways only = spin. Let go = stop.<br>
+   Keys: arrows or WASD (Shift = slow). <span id="drivestate"></span></div>
+ </section>
+<section class="card wide" id="mapbox">
+ <h2>Map</h2>
+ <canvas id="mapcv"></canvas>
+ <div class="mapbar">
+  <span class="mapseg" id="toolseg"><button data-tool="view">Look</button><button data-tool="go">Go here</button><button data-tool="nogo">Keep-out</button><button data-tool="clean">Clean zone</button><button data-tool="room">Name room</button></span>
+ </div>
+ <div class="note" id="gonote" style="margin-top:6px"></div>
+ <div id="editbox" style="display:none;margin-top:6px">
+  <table id="zonetab"></table>
+  <div class="mapbar">
+   <button id="editsave" style="background:var(--y);color:#111;font-weight:700">Save to Lucy</button>
+   <button id="editundo">Discard changes</button>
+   <button id="cleanzones" title="Start a run that cleans just the green zones (the ticked ones, if any are ticked)">Clean the green zones now</button>
+   <button id="cleanrooms" title="Start a run that cleans just the ticked rooms" disabled>Clean ticked rooms</button>
+  </div>
+  <pre class="note" id="editout"></pre>
+ </div>
+ <div class="mapbar">
+  <span class="mapseg"><button data-view="clean">Tidy</button><button data-view="raw">Raw</button></span>
+  <button id="mapnow">Refresh</button>
+  <label><input type="checkbox" id="mapauto"> live</label>
+ </div>
+ <details class="sub"><summary>How the map works</summary>
+  <div class="note" id="mapnote">Her live working map, straight from her memory. <b>Tidy</b> = cleaned up like the old app's map; <b>Raw</b> = everything she's seen,
+   including stray sensor rays. Blue dot + line = where she thinks she is and which way she faces. Grid = 1 m. Dashed outlines = her rooms;
+   red = keep-out zones; green = clean zones. <b>Look</b> does nothing on a tap. <b>Go here</b>: tap the map to send her there.
+   <b>Keep-out / Clean zone</b>: tap corners (or drag a rectangle), then "Save to Lucy". <b>Name room</b>: tap inside its outline.
+   Tick zones or rooms to clean just those (at the start she spends ~20 s working out where she is).</div></details>
+ <details class="sub slots"><summary>Saved maps</summary>
+  <div class="note" id="slotcur"></div>
+  <table id="slottab"></table>
+  <div class="mapbar">
+   <button id="slotsave">Save current map as&hellip;</button>
+   <button id="slotblank" title="She starts a fresh map on her next run">New place: blank map</button>
+   <button id="slotlist">Refresh list</button>
+  </div>
+  <div class="note">Taking her somewhere new: <b>Save</b> her map first (e.g. "home"), then <b>New place</b>, run her
+   there and save that map too. Coming back: <b>Load</b> "home". Loading/blanking restarts her mapping program (~10 s) and keeps an
+   automatic backup (grey "_before_" rows, newest 5 kept). Only while she's docked. The map guard puts her map back if a normal run
+   saves a much smaller one.</div>
+  <pre class="note" id="slotout"></pre>
+ </details>
+</section>
+
+<details class="card wide" id="expcard">
+ <summary>Experimental</summary>
+ <div class="row2"><label><input type="checkbox" id="guides"> width guides on the camera</label></div>
+ <details class="sub" id="lab"><summary>Video tests</summary>
+  <div class="note">Switch things off one at a time and watch the camera. Takes effect straight away; resets when the server restarts.</div>
+  <label><input type="checkbox" data-lab="hold"> hold after a lost frame (freeze, not smear)</label><br>
+  <label><input type="checkbox" data-lab="torncheck"> drop frames read while being overwritten</label><br>
+  <label><input type="checkbox" data-lab="feeds"> position + depth feeds (parking view, re-align)</label><br>
+  <label><input type="checkbox" data-lab="maps"> map pulls from her</label><br>
+  <label>frame timing <select data-lab="pace"><option value="real">real gaps</option><option value="fixed">fixed 20 fps</option></select></label>
+  <div class="note" id="labstats">...</div>
+ </details>
+ <details class="sub"><summary>Her name</summary>
+  <div class="row2"><input id="namein" maxlength="24" placeholder="LUCY" style="flex:1 1 160px"><button id="namesave">Save</button></div>
+  <div class="note">Shown at the top of the page. Saved on this server (settings.json, backed up with everything else), so every phone sees it.</div>
+ </details>
+ <details class="sub"><summary>3D scanner</summary><div class="note">Coming back here once the rest is settled.</div></details>
+ <details class="sub" id="logbox"><summary>Sent commands (debug)</summary><div id="cmdlog"></div></details>
+ <p class="note">On the dock her cameras are asleep; the server wakes them while the camera is open (a few seconds).
+  After driving, press Dock so she goes back to charging. VLC: /lucy.mp4 or /depth.mp4.
+  The old control page is still at <a id="oldpage" href="#">:8080</a>.</p>
+ <p class="note" id="diag"></p>
+</details>
+</main>
+<script>
+// ---- feedback: every button shows a blue ring when pressed, then green (her server answered OK)
+// or red (failed) from the POST it caused; all POSTs are listed in "Sent commands".
+let lastBtn = null, lastBtnAt = 0;
+addEventListener('pointerdown', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  lastBtn = b; lastBtnAt = Date.now();
+  b.classList.remove('ok', 'bad'); b.classList.add('pressed');
+  setTimeout(() => b.classList.remove('pressed'), 1500);
+}, true);
+function logCmd(t, cls) {
+  const el = document.getElementById('cmdlog');
+  if (!el) return;
+  const line = document.createElement('div');
+  line.textContent = new Date().toLocaleTimeString() + '  ' + t;
+  if (cls) line.style.color = cls;
+  el.prepend(line);
+  while (el.childNodes.length > 80) el.lastChild.remove();
+}
+const _fetch = window.fetch;
+let lastDriveLog = '';
+window.fetch = (url, opt) => {
+  const isPost = opt && opt.method === 'POST';
+  const btn = isPost && Date.now() - lastBtnAt < 2500 ? lastBtn : null;
+  const p = _fetch(url, opt);
+  if (!isPost) return p;
+  p.then(r => r.clone().text().then(txt => {
+    const ok = r.ok && !/"ok": ?false|error/i.test(txt);
+    if (btn) { btn.classList.remove('pressed'); btn.classList.add(ok ? 'ok' : 'bad'); setTimeout(() => btn.classList.remove('ok', 'bad'), 1500); }
+    const line = `${url} ${opt.body || ''} -> ${r.status} ${txt.slice(0, 160)}`;
+    if (url === '/api/drive') { const k = txt.replace(/"ready": ?true/, ''); if (k === lastDriveLog) return; lastDriveLog = k; }
+    logCmd(line, ok ? null : '#e77');
+  })).catch(e => {
+    if (btn) { btn.classList.remove('pressed'); btn.classList.add('bad'); }
+    logCmd(`${url} ${opt.body || ''} -> FAILED ${e}`, '#e77');
+  });
+  return p;
+};
+// ---- video: H.264 repackaged as fragmented MP4, played through Media Source Extensions
+const cams = {};
+function startCam(id, url) {
+  stopCam(id);
+  const v = document.getElementById(id);
+  const ctl = new AbortController();
+  const ms = new MediaSource();
+  cams[id] = { ctl, ms, status: 'connecting' };
+  v.src = URL.createObjectURL(ms);
+  ms.addEventListener('sourceopen', async () => {
+    const sb = ms.addSourceBuffer('video/mp4; codecs="avc1.640028"');
+    const queue = [];
+    const pump = () => { if (!sb.updating && queue.length) sb.appendBuffer(queue.shift()); };
+    sb.addEventListener('updateend', () => {
+      const b = v.buffered;
+      if (b.length) {
+        const lag = b.end(b.length - 1) - v.currentTime;
+        if (lag > 3) v.currentTime = b.end(b.length - 1) - 0.3;
+        v.playbackRate = lag > 0.8 ? 1.15 : lag > 0.4 ? 1.05 : 1.0;
+        if (!sb.updating && v.currentTime - b.start(0) > 20) { sb.remove(b.start(0), v.currentTime - 5); return; }
+      }
+      pump();
+    });
+    try {
+      const resp = await fetch(url, { signal: ctl.signal });
+      const reader = resp.body.getReader();
+      cams[id].status = 'live';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        queue.push(value); pump();
+        if (v.paused) v.play().catch(() => {});
+      }
+    } catch (e) { if (ctl.signal.aborted) return; cams[id].status = 'error: ' + e; }
+    if (cams[id] && cams[id].ctl === ctl) setTimeout(() => startCam(id, url), 3000);   // reconnect
+  });
+}
+function stopCam(id) {
+  const c = cams[id];
+  if (!c) return;
+  c.ctl.abort();
+  delete cams[id];
+  const v = document.getElementById(id);
+  v.removeAttribute('src'); v.load();
+}
+const URLS = { main: '/lucy.mp4', night: '/depth.mp4' };
+// Watching the night-vision (depth) video as well costs the main camera ~7% of its frames
+// (Lucy can't serve both rings fast enough), which shows as freezes: main only by default, and
+// never the hidden night video in driving mode (2026-10-25).
+const DRIVING = /[?&]drive(=|&|$)/.test(location.search);
+const SECS = Object.assign({ cam: true, say: false }, JSON.parse(localStorage.getItem('liveSecs') || '{}'));
+// The camera is on whenever its section of the Live panel is open (the server wakes her cameras
+// if she's docked), until it's turned Off by hand, the page sits in the background for a minute,
+// or it's been on 10 minutes while she's docked. Those automatic Offs (camAuto) come back on
+// when she sets off or goes into manual mode. Picking a mode by hand is remembered (2026-10-26).
+let camAuto = false, wasIdle = null, camOnAt = 0, lastTouch = Date.now();
+const camWanted = () => DRIVING || (!window.LIVE_CLOSED && SECS.cam);
+const lastCam = () => {
+  if (DRIVING) { const d = localStorage.getItem('lucyDriveCam'); return d === 'night' ? 'night' : 'main'; }
+  const m = localStorage.getItem('lucyMode2'); return m && m !== 'off' ? m : 'main';
+};
+function autoOff(why) {
+  if (window.LUCY_CAM_OFF) return;
+  camAuto = true; setMode('off', true);
+  document.getElementById('camoffwhy').textContent = why ? ' (' + why + ')' : '';
+}
+function setMode(mode, transient) {
+  if (!camWanted() && mode !== 'off') return;          // camera section shut: no video
+  if (mode !== 'off') { camOnAt = Date.now(); camAuto = false; document.getElementById('camoffwhy').textContent = ''; }
+  if (DRIVING) {                                   // driving mode: one camera (main or night) or none (Chloe, 29 Oct)
+    if (mode !== 'off' && mode !== 'night') mode = 'main';
+    if (!transient) localStorage.setItem('lucyDriveCam', mode);
+  } else if (!transient && mode !== 'off') localStorage.setItem('lucyMode2', mode);   // new key: old 'both' choices reset
+  if (!transient && mode === 'off') camAuto = false;   // turned off by hand: stays off
+  window.LUCY_CAM_OFF = mode === 'off';            // park_view.js updates faster then
+  document.body.classList.toggle('camoff', mode === 'off');
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  for (const id of ['main', 'night']) {
+    const show = mode === 'both' || mode === id;
+    document.getElementById('cam-' + id).classList.toggle('hidden', !show);
+    if (show && !cams[id]) startCam(id, URLS[id]);
+    if (!show) stopCam(id);
+  }
+}
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+if (DRIVING) setMode(localStorage.getItem('lucyDriveCam') || 'main');   // main page: the Live panel starts it
+document.getElementById('guides').onchange = e => { document.getElementById('guide').style.display = e.target.checked ? '' : 'none'; };
+document.getElementById('guide').style.display = 'none';      // off unless ticked (Chloe, 26 Oct)
+setInterval(() => {
+  document.getElementById('diag').textContent = Object.entries(cams).map(([k, c]) => {
+    const el = document.getElementById(k), b = el.buffered;
+    const lag = b.length ? (b.end(b.length - 1) - el.currentTime).toFixed(2) : '-';
+    return `${k}: ${c.status}, lag ${lag}s`;
+  }).join('   ');
+}, 1000);
+
+// ---- controls. Manual mode needs MANCTRL S, then K every 3 s or it times out (~14 s).
+// Each ANGLE command makes her do one ~2.3 s motion that ANGLE:0 can't cut short, and extra
+// commands queue up - so send one per tap, and repeat while held only as fast as she uses them.
+const post = (path, obj) => fetch(path, { method: 'POST', body: JSON.stringify(obj) }).catch(() => {});
+const rx = (cmd, data, key) => post('/api/rx', { cmd, data, key: key || '2' });
+let manual = false, keepTimer = null;
+function setManual(on) {
+  if (on === manual) return;
+  manual = on;
+  if (on && !window.LIVE_CLOSED) { if (!SECS.cam) toggleSec('cam', true); else if (window.LUCY_CAM_OFF) setMode(lastCam(), true); }
+  document.getElementById('manual').classList.toggle('on', on);
+  clearInterval(keepTimer);
+  if (on) { rx('MANCTRL', 'S'); keepTimer = setInterval(() => rx('MANCTRL', 'K'), 3000); }
+  else rx('MANCTRL', 'E');
+}
+document.getElementById('manual').onclick = () => setManual(!manual);
+document.getElementById('spot').onclick = () => { setManual(true); setTimeout(() => rx('SPIRAL', '', '13'), 1500); };
+document.getElementById('dock').onclick = () => { post('/api/drive', { end: true }); setManual(false); setTimeout(() => post('/api/speaker', { value: 'dock' }), 1500); };
+// 88 = normal maximum (the old app's pet-mode cap); 100 is real full power - louder, hotter,
+// shorter runs, so it's a boost rather than the default.
+// In manual mode (driving, spot) blowerMode does nothing; the old app's hidden "test bot" setting
+// (SET_TEST_BOT, key 17) sets fan and brushes directly there (found 2026-10-25).
+const testBot = (blower, main, side) => rx('SET_TEST_BOT', JSON.stringify({ blower: String(blower), main_brush: String(main),
+  side_brush: String(side), water_pump: '0', forward_distance: '0', forward_wheel_velocity: '0', rotate_wheel_velocity: '0' }), '17');
+let lastDriveAt = 0;
+const SUCTION = [0, 10, 20, 30, 40, 50, 60, 70, 80, 88, 90, 100];
+function showSuction(v) {
+  document.querySelectorAll('#suction button').forEach(b => b.classList.toggle('on', +b.dataset.v === +v));
+  document.getElementById('suctionnow').textContent = v === undefined || v === null ? '' : (+v === 88 ? '88 (normal)' : v);
+}
+const suction = v => {
+  post('/api/speaker', { value: 'blowerMode:' + v });
+  if (manual || Date.now() - lastDriveAt < 30000) testBot(v, v ? 50 : 0, v ? 30 : 0);
+  showSuction(v);
+};
+for (const v of SUCTION) {
+  const b = document.createElement('button');
+  b.dataset.v = v; b.textContent = v === 88 ? '88 ★' : v;
+  if (v === 88) { b.classList.add('fav'); b.title = 'Normal (the old app’s maximum)'; }
+  if (v === 100) b.title = 'Boost: louder, hotter, shorter runs';
+  b.onclick = () => suction(v);
+  document.getElementById('suction').appendChild(b);
+}
+// ---- Listen: her own RTMP stream (video + mic) via MediaMTX's HLS page (WebRTC can't carry AAC).
+// The mic only runs in "monitoring": RTMP_THROB keeps the stream up, and each STREAM_CONTROL 1
+// opens a 15 s mic window (repeats while open are ignored), so send both every 2.5 s.
+let listenTimer = null;
+async function setListen(on) {
+  const btn = document.getElementById('listen'), box = document.getElementById('cam-native');
+  const frame = document.getElementById('native'), note = document.getElementById('native-note');
+  clearInterval(listenTimer); listenTimer = null;
+  btn.classList.toggle('on', on);
+  box.classList.toggle('hidden', !on);
+  note.classList.toggle('hidden', !on);
+  // her own stream (with sound) replaces our camera while listening: two feeds is too much
+  if (!on) { frame.src = 'about:blank'; setMode(lastCam(), true); return; }
+  for (const id of ['main', 'night']) { stopCam(id); document.getElementById('cam-' + id).classList.add('hidden'); }
+  // RTMP_THROB + STREAM_CONTROL alone start her stream with the mic: no manual mode, so no brushes
+  // and a clean in progress carries on (found 2026-10-26; before, this held manual mode).
+  const beat = () => { rx('RTMP_THROB', '', '10'); rx('STREAM_CONTROL', '1', '10'); };
+  setTimeout(beat, 1200);
+  listenTimer = setInterval(beat, 2500);
+  note.textContent = 'Starting her stream...';
+  for (let i = 0; i < 20 && listenTimer; i++) {
+    const r = await fetch('/api/native').then(r => r.json()).catch(() => ({}));
+    if (r.id) {
+      frame.src = `http://${location.hostname}:8888/app-name/${r.id}`;
+      note.textContent = 'Her own stream with sound, a few seconds behind. Press play if it doesn\'t start.';
+      return;
+    }
+    await new Promise(res => setTimeout(res, 1500));
+  }
+  if (listenTimer) note.textContent = 'Her stream didn\'t show up on MediaMTX (is the LucyMediaMTX task running?)';
+}
+document.getElementById('listen').onclick = () => setListen(!listenTimer);
+const _dock = document.getElementById('dock').onclick;
+document.getElementById('dock').onclick = () => { setListen(false); _dock(); };
+// ---- Map: her live occupancy grid (visual_mapper SHM, read by capture_server's map_reader).
+// Cells: 128 = unseen, below = free (0 = surely free), above = occupied (255 = wall).
+// Grid rows follow world x and columns world y, both decreasing: row = (max_x - x)/cs,
+// col = (max_y - y)/cs, so +x points up the picture and +y left (same as render_map.py).
+// The picture is cropped to the explored area so it isn't mostly grey.
+const MAP_SCALE = 3;
+function cellRGB(v) {
+  if (v === 128) return [60, 60, 60];
+  if (v < 128) { const g = 250 - v; return [g, g, g]; }
+  return [20, 20, 120 + ((v - 128) >> 1)];
+}
+// Clean view: free floor filled, walls only where they border free floor (drops the stray
+// rays and specks out in unexplored space), everything else black - like the old app's map.
+function cleanRGB(cells, w, h, i) {
+  const v = cells[i];
+  if (v < 100) return [38, 52, 78];
+  if (v > 150) {
+    const r = (i / w) | 0, c = i % w;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < h && cc >= 0 && cc < w && cells[rr * w + cc] < 100) return [235, 240, 250];
+    }
+  }
+  return [0, 0, 0];
+}
+let mapView = localStorage.getItem('lucyMapView') || 'clean', lastMap = null, mapInfo = null, view = null;
+function drawMap(m) {
+  lastMap = m;
+  const w = m.width, h = m.height, cs = m.cell_size, clean = mapView === 'clean';
+  const raw = atob(m.cells_b64), cells = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) cells[i] = raw.charCodeAt(i);
+  let r0 = h, r1 = 0, c0 = w, c1 = 0;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++)
+    if (cells[r * w + c] !== 128) { r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, c); c1 = Math.max(c1, c); }
+  if (r0 > r1) { r0 = 0; r1 = h - 1; c0 = 0; c1 = w - 1; }          // nothing mapped yet
+  const pad = 12;
+  r0 = Math.max(0, r0 - pad); r1 = Math.min(h - 1, r1 + pad); c0 = Math.max(0, c0 - pad); c1 = Math.min(w - 1, c1 + pad);
+  const W = c1 - c0 + 1, H = r1 - r0 + 1;
+  const cv = document.getElementById('mapcv'), ctx = cv.getContext('2d');
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d'), img = tctx.createImageData(W, H);
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    const i = (r + r0) * w + c + c0, p = (r * W + c) * 4;
+    const [R, G, B] = clean ? cleanRGB(cells, w, h, i) : cellRGB(cells[i]);
+    img.data[p] = R; img.data[p + 1] = G; img.data[p + 2] = B; img.data[p + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+  cv.width = W * MAP_SCALE; cv.height = H * MAP_SCALE;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, cv.width, cv.height);
+  const px = (x, y) => [((m.max_y - y) / cs - c0) * MAP_SCALE, ((m.max_x - x) / cs - r0) * MAP_SCALE];
+  view = { m, r0, c0 };
+  ctx.strokeStyle = 'rgba(0,170,0,0.25)'; ctx.lineWidth = 1;          // 1 m grid
+  for (let gx = Math.ceil(m.max_x - h * cs); gx <= m.max_x; gx++) { const [, Y] = px(gx, 0); ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(cv.width, Y); ctx.stroke(); }
+  for (let gy = Math.ceil(m.max_y - w * cs); gy <= m.max_y; gy++) { const [X] = px(0, gy); ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, cv.height); ctx.stroke(); }
+  if (mapInfo) {
+    const poly = (pts, close) => { ctx.beginPath(); pts.forEach(([x, y], k) => { const [X, Y] = px(x, y); k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); if (close) ctx.closePath(); };
+    const zcol = { 0: [255, 77, 77], 1: [70, 220, 120] };
+    for (const z of (zones || mapInfo.paths)) {
+      if (z.points.length < 2) continue;
+      const [R, G, B] = zcol[z.type] || [200, 200, 200];
+      poly(z.points, z.type <= 1);
+      ctx.strokeStyle = `rgb(${R},${G},${B})`; ctx.lineWidth = 2; ctx.setLineDash(z.state === 0 || z.draft ? [5, 4] : []); ctx.stroke();
+      if (z.type <= 1) { ctx.fillStyle = `rgba(${R},${G},${B},0.25)`; ctx.fill(); }
+      ctx.setLineDash([]);
+      if (z.name) { const [X, Y] = px(...z.points[0]); ctx.font = '12px sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = `rgb(${R},${G},${B})`; ctx.fillText(z.name, X + 3, Y + 13); }
+    }
+    if (polyDraft.length) {
+      poly(polyDraft, false);
+      ctx.strokeStyle = tool === 'clean' ? '#46dc78' : '#ff4d4d'; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+      polyDraft.forEach(([x, y], k) => { const [X, Y] = px(x, y); ctx.beginPath(); ctx.arc(X, Y, k ? 4 : 7, 0, 2 * Math.PI); ctx.fillStyle = k ? '#fff' : '#ffd23c'; ctx.fill(); });
+    }
+    if (dragBox) {
+      const [a, b] = dragBox;
+      poly([a, [a[0], b[1]], b, [b[0], a[1]]], true);
+      ctx.strokeStyle = tool === 'clean' ? '#46dc78' : '#ff4d4d'; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.font = 'bold ' + Math.round(cv.width / 35) + 'px sans-serif'; ctx.textAlign = 'center';
+    for (const rm of mapInfo.rooms) {
+      if (rm.contour.length > 2) { poly(rm.contour, true); ctx.strokeStyle = 'rgba(255,200,80,0.8)'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]); }
+      if (rm.seed) { const [X, Y] = px(...rm.seed); ctx.fillStyle = '#ffc850'; ctx.fillText(rm.name || ('Room ' + rm.id), X, Y); }
+    }
+  }
+  if (goTarget) {
+    const [X, Y] = px(...goTarget);
+    ctx.strokeStyle = '#3f6'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(X, Y, 8, 0, 2 * Math.PI); ctx.moveTo(X - 12, Y); ctx.lineTo(X + 12, Y); ctx.moveTo(X, Y - 12); ctx.lineTo(X, Y + 12); ctx.stroke();
+  }
+  if (m.pose) {
+    const [X, Y] = px(m.pose.x, m.pose.y), th = m.pose.theta || 0, L = 0.4 / cs * MAP_SCALE;
+    ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X - L * Math.sin(th), Y - L * Math.cos(th)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(X, Y, 0.17 / cs * MAP_SCALE, 0, 2 * Math.PI);    // her body, ~34 cm across
+    ctx.fillStyle = 'rgba(52,152,219,0.8)'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+}
+let mapBusy = false;
+async function loadMapInfo() {
+  const d = await fetch('/api/mapinfo').then(r => r.json()).catch(() => null);
+  if (d && d.ok) {
+    // Her database can hold rooms for two maps (map 1, and map 100 where she saves runs while a zone
+    // freezes map 1); drawing both doubled the outlines. Keep the set that fits the live map best:
+    // the share of each set's outline points that sit near free floor on the live map.
+    const ids = [...new Set(d.rooms.map(r => r.map))];
+    if (ids.length > 1 && lastMap) {
+      const raw = atob(lastMap.cells_b64), m = lastMap, cs = m.cell_size;
+      const fit = id => {
+        let n = 0, ok = 0;
+        for (const r of d.rooms.filter(r => r.map === id)) for (const [x, y] of r.contour) {
+          const row = Math.round((m.max_x - x) / cs), col = Math.round((m.max_y - y) / cs);
+          if (row < 2 || col < 2 || row >= m.height - 2 || col >= m.width - 2) { n++; continue; }
+          let free = false;
+          for (let dr = -2; dr <= 2 && !free; dr++) for (let dc = -2; dc <= 2; dc++) if (raw.charCodeAt((row + dr) * m.width + col + dc) < 100) { free = true; break; }
+          n++; if (free) ok++;
+        }
+        return n ? ok / n : 0;
+      };
+      const best = ids.reduce((a, b) => fit(b) > fit(a) ? b : a);
+      d.otherRooms = d.rooms.filter(r => r.map !== best);
+      d.rooms = d.rooms.filter(r => r.map === best);
+    }
+    mapInfo = d; lastSched = ''; if (!dirty) zones = null; if (lastMap) drawMap(lastMap); renderEdit();
+  }
+}
+async function refreshMap(withInfo) {
+  if (mapBusy) return;
+  mapBusy = true;
+  const note = document.getElementById('mapnote');
+  if (withInfo === true) loadMapInfo();
+  try {
+    const m = await fetch('/api/map').then(r => r.json());
+    if (m.ok) { drawMap(m); note.dataset.t = new Date().toLocaleTimeString(); }
+    else note.dataset.t = 'map read failed: ' + (m.error || '?');
+  } catch (e) { note.dataset.t = 'map read timed out - she is busy or the Wi-Fi is, try again'; }   // reading her ~2 MB map over SSH can take a while mid-run
+  mapBusy = false;
+  document.getElementById('mapnow').textContent = 'Refresh (' + note.dataset.t + ')';
+}
+let mapTimer = null;
+document.getElementById('mapnow').onclick = () => refreshMap(true);
+function setMapView(v) {
+  mapView = v; localStorage.setItem('lucyMapView', v);
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  if (lastMap) drawMap(lastMap);
+}
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setMapView(b.dataset.view));
+setMapView(mapView);
+
+// ---- Click the map = go there (A2B, rx key 12, "x,y" in map metres - same frame as her pose).
+// A2B only runs in manual mode (kept alive by the K timer in setManual). Entering manual mode
+// on the dock makes her back off ~35 cm by herself, so no extra reversing is needed. A pending
+// A2B fires the next time manual mode starts, so ANGLE:0 straight after S clears any old one.
+let goTarget = null, goTimer = null;
+const goNote = t => { document.getElementById('gonote').innerHTML = t; };
+function mapXY(e) {           // mouse event -> [x, y] in map metres
+  const cv = document.getElementById('mapcv'), b = cv.getBoundingClientRect();
+  const col = (e.clientX - b.left) * cv.width / b.width / MAP_SCALE + view.c0;
+  const row = (e.clientY - b.top) * cv.height / b.height / MAP_SCALE + view.r0;
+  return [+(view.m.max_x - row * view.m.cell_size).toFixed(2), +(view.m.max_y - col * view.m.cell_size).toFixed(2)];
+}
+document.getElementById('mapcv').onclick = async e => {
+  if (!view || tool !== 'go') return;
+  const [x, y] = mapXY(e);
+  if (!confirm(`Send her to this spot (${x}, ${y})? She'll go into manual mode and drive there herself.`)) return;
+  goTarget = [x, y]; drawMap(view.m);
+  const first = !manual;
+  setManual(true);
+  if (first) { await new Promise(r => setTimeout(r, 2000)); rx('MANCTRL', 'ANGLE:0'); await new Promise(r => setTimeout(r, 1000)); }
+  rx('A2B', `${x},${y}`, '12');
+  goNote(`Heading to (${x}, ${y})... <button id="gostop">Stop</button> (Dock sends her home)`);
+  document.getElementById('gostop').onclick = stopGo;
+  if (!mapTimer) document.getElementById('mapauto').click();      // watch her go
+  clearInterval(goTimer);
+  goTimer = setInterval(() => {
+    const p = lastMap && lastMap.pose;
+    if (!p || !goTarget) return;
+    const d = Math.hypot(p.x - goTarget[0], p.y - goTarget[1]);
+    if (d < 0.3) { goNote(`Arrived at (${goTarget[0]}, ${goTarget[1]}). Still in manual mode: drive on, or press Dock.`); clearInterval(goTimer); }
+  }, 1000);
+};
+function stopGo() {           // leaving manual mode ends the A2B; she then waits (paused) until Dock
+  clearInterval(goTimer); goTarget = null; setManual(false);
+  goNote('Stopped. Press Dock to send her home.');
+  if (lastMap) drawMap(lastMap);
+}
+// ---- Zones and room names (written into her data.db by /api/mapedit, then cloud_node restarts).
+// map_path type 0 = keep-out (NO_GO_ZONE), 1 = clean zone (DESIGNATED_AREA, the old app's
+// "clean this area"). Edits stay on the page (dashed) until "Save to Lucy".
+const picked = { zones: new Set(), rooms: new Set() };   // ticked for a targeted clean
+let tool = 'view', zones = null, dirty = false, dragBox = null, roomEdits = {}, polyDraft = [];
+const editOut = t => { document.getElementById('editout').textContent = t; };
+const TOOL_HELP = {
+  view: 'Move / zoom: taps do nothing here, so it is safe to look around. Pick a tool to act.',
+  go: 'Go here: click a spot to send her there (asks first).',
+  nogo: 'Tap corners one by one to outline a shape where she must never go (red), then tap the yellow first corner to close it. Or drag for a rectangle. Then "Save to Lucy". She adds a safety margin round it, so leave gaps of ~40 cm.',
+  clean: 'Tap corners one by one round a spot to clean (green), then tap the yellow first corner to close it. Or drag for a rectangle. Save, then "Clean the green zones now".',
+  room: 'Click inside a dashed room outline to name it. Then "Save to Lucy".',
+};
+function setTool(t) {
+  if (polyDraft.length && t !== tool) { polyDraft = []; if (lastMap) drawMap(lastMap); }
+  tool = t;
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  document.getElementById('mapcv').style.cursor = t === 'view' ? 'grab' : t === 'go' ? 'pointer' : 'crosshair';
+  document.getElementById('mapcv').style.touchAction = (t === 'nogo' || t === 'clean') ? 'none' : '';
+  goNote(TOOL_HELP[t]);
+  renderEdit();
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+setTool('view');            // inert by default: nothing happens on a tap until a tool is picked
+function myZones() {           // working copy of her zone list (types 0 and 1 only; others kept as-is)
+  if (!zones) zones = (mapInfo ? mapInfo.paths : []).map(z => ({ ...z }));
+  return zones;
+}
+function renderEdit() {
+  const box = document.getElementById('editbox');
+  const zs = zones || (mapInfo ? mapInfo.paths : []);
+  box.style.display = ((tool !== 'go' && tool !== 'view') || dirty || zs.length || (mapInfo && mapInfo.rooms.length)) ? '' : 'none';
+  const tab = document.getElementById('zonetab');
+  tab.innerHTML = '';
+  zs.forEach((z, i) => {
+    if (z.type > 1) return;
+    const tr = tab.insertRow();
+    const tc = tr.insertCell();
+    if (z.type === 1 && !z.draft && !dirty) tc.appendChild(tick(picked.zones, z.id));
+    const xs = z.points.map(p => p[0]), ys = z.points.map(p => p[1]);
+    tr.insertCell().innerHTML = z.type === 0 ? '<span style="color:#ff6b6b">keep-out</span>' : '<span style="color:#46dc78">clean zone</span>';
+    tr.insertCell().textContent = (z.name || '') + (z.draft ? ' (not saved yet)' : '');
+    tr.insertCell().textContent = `${(Math.max(...xs) - Math.min(...xs)).toFixed(1)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)} m`;
+    const b = document.createElement('button'); b.textContent = 'Remove';
+    b.onclick = () => { myZones().splice(i, 1); dirty = true; renderEdit(); if (lastMap) drawMap(lastMap); };
+    tr.insertCell().appendChild(b);
+  });
+  for (const rm of (mapInfo ? mapInfo.rooms : [])) {
+    const tr = tab.insertRow();
+    const tc = tr.insertCell();
+    if (!dirty) tc.appendChild(tick(picked.rooms, rm.id));
+    tr.insertCell().innerHTML = '<span style="color:#ffc850">room</span>';
+    tr.insertCell().textContent = (rm.name || 'Room ' + rm.id) + (roomEdits[rm.id] ? ' (not saved yet)' : '');
+    tr.insertCell();
+    const b = document.createElement('button'); b.textContent = 'Clean this room';
+    b.disabled = dirty;
+    b.onclick = () => {
+      if (!confirm(`Start a run that cleans just "${rm.name || 'Room ' + rm.id}"?`)) return;
+      setManual(false);
+      setTimeout(() => post('/api/maprun', { map: 1, type: 3, ids: [rm.id] }), 1500);
+      goNote('Sent. Tick "live" to watch her.');
+    };
+    tr.insertCell().appendChild(b);
+  }
+  document.getElementById('editsave').disabled = !dirty;
+  document.getElementById('editundo').disabled = !dirty;
+  document.getElementById('cleanzones').disabled = dirty || !zs.some(z => z.type === 1);
+  document.getElementById('cleanzones').textContent = picked.zones.size ? `Clean ticked zones (${picked.zones.size})` : 'Clean all green zones';
+  document.getElementById('cleanrooms').disabled = dirty || !picked.rooms.size;
+  document.getElementById('cleanrooms').textContent = `Clean ticked rooms${picked.rooms.size ? ` (${picked.rooms.size})` : ''}`;
+}
+function tick(set, id) {        // a tick box for choosing which zones/rooms a targeted clean covers
+  const c = document.createElement('input'); c.type = 'checkbox'; c.checked = set.has(id);
+  c.onchange = () => { c.checked ? set.add(id) : set.delete(id); renderEdit(); };
+  return c;
+}
+function inPoly([x, y], pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+const cvEl = document.getElementById('mapcv');
+// pointer events (mouse, pen and touch); while a draw tool is on, touch-action:none stops a
+// finger drag from scrolling/zooming the page instead of drawing
+cvEl.onpointerdown = e => {
+  if (!view || (tool !== 'nogo' && tool !== 'clean')) return;
+  e.preventDefault();
+  cvEl.setPointerCapture(e.pointerId);
+  const a = mapXY(e); dragBox = [a, a];
+  const move = ev => { dragBox = [a, mapXY(ev)]; drawMap(lastMap); };
+  const up = ev => {
+    cvEl.removeEventListener('pointermove', move); cvEl.removeEventListener('pointerup', up); cvEl.removeEventListener('pointercancel', up);
+    const b = mapXY(ev); dragBox = null;
+    if (Math.abs(a[0] - b[0]) < 0.15 && Math.abs(a[1] - b[1]) < 0.15) { polyTap(a); return; }   // a tap: polygon corner
+    if (Math.abs(a[0] - b[0]) < 0.15 || Math.abs(a[1] - b[1]) < 0.15) { drawMap(lastMap); return; }   // too thin: a stray drag
+    polyDraft = [];
+    addZone([a, [a[0], b[1]], b, [b[0], a[1]]]);
+  };
+  cvEl.addEventListener('pointermove', move); cvEl.addEventListener('pointerup', up); cvEl.addEventListener('pointercancel', up);
+};
+// Polygon zones: each tap adds a corner; tapping near the first corner (3+ corners) closes it.
+function polyTap(p) {
+  const near = q => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.2;
+  if (polyDraft.length >= 3 && near(polyDraft[0])) { const pts = polyDraft; polyDraft = []; addZone(pts); return; }
+  if (polyDraft.length && near(polyDraft[polyDraft.length - 1])) return;          // double tap on the same spot
+  polyDraft.push(p);
+  if (polyDraft.length >= 32) { const pts = polyDraft; polyDraft = []; addZone(pts); return; }   // her limit
+  goNote(`${polyDraft.length} corner${polyDraft.length > 1 ? 's' : ''} placed. ${polyDraft.length >= 3 ? 'Tap the yellow first corner to close the shape. ' : ''}<button id="polyundo">Undo corner</button> <button id="polycancel">Cancel shape</button>`);
+  document.getElementById('polyundo').onclick = () => { polyDraft.pop(); goNote(polyDraft.length ? `${polyDraft.length} corners placed.` : TOOL_HELP[tool]); drawMap(lastMap); };
+  document.getElementById('polycancel').onclick = () => { polyDraft = []; goNote(TOOL_HELP[tool]); drawMap(lastMap); };
+  drawMap(lastMap);
+}
+function addZone(points) {
+  {
+    const type = tool === 'nogo' ? 0 : 1;
+    const name = (prompt(type ? 'Name for this clean zone (optional, e.g. "under the table"):' : 'Name for this keep-out zone (optional, e.g. "cables"):', '') || '').trim();
+    myZones().push({ map: 1, type, name, state: 1, draft: true, points });
+    dirty = true; goNote(TOOL_HELP[tool]); drawMap(lastMap); renderEdit();
+  }
+}
+cvEl.addEventListener('click', e => {
+  if (!view || tool !== 'room' || !mapInfo) return;
+  const p = mapXY(e);
+  const rm = mapInfo.rooms.find(r => r.contour.length > 2 && inPoly(p, r.contour));
+  if (!rm) { goNote('That spot isn\'t inside one of her rooms (dashed outlines). ' + TOOL_HELP.room); return; }
+  const cur = (roomEdits[rm.id] && roomEdits[rm.id].name) || rm.name || '';
+  const name = prompt(`Name for room ${rm.id}:`, cur);
+  if (name === null) return;
+  roomEdits[rm.id] = { name: name.trim(), selected: rm.selected || 0 };
+  rm.name = name.trim();          // show it straight away
+  dirty = true; drawMap(lastMap); renderEdit();
+});
+document.getElementById('editundo').onclick = () => { zones = null; roomEdits = {}; dirty = false; loadMapInfo(); editOut(''); };
+document.getElementById('editsave').onclick = async () => {
+  const st = await fetch('/api/maps').then(r => r.json()).then(d => d.state).catch(() => 'unknown');
+  if (!confirm(`Save these zones/names to Lucy? Her map is backed up first. Best while she's docked - she reports: ${st}.\n\nNote: while she has zones, she stops updating her saved map after runs (we can fold a run's map in by hand).`)) return;
+  editOut('Saving... (~10 s)');
+  const body = { map: 1, zones: myZones().filter(z => z.type <= 1).map(z => ({ type: z.type, name: z.name || '', points: z.points })),
+                 rooms: Object.entries(roomEdits).map(([id, r]) => ({ id: +id, name: r.name, selected: r.selected })) };
+  const d = await fetch('/api/mapedit', { method: 'POST', body: JSON.stringify(body) }).then(r => r.json()).catch(e => ({ ok: false, out: String(e) }));
+  editOut((d.ok ? 'Saved (backup slot ' + d.slot + ').\n' : 'Didn\'t work:\n') + d.out);
+  if (d.ok) { zones = null; roomEdits = {}; dirty = false; listSlots(); setTimeout(loadMapInfo, 1000); }
+};
+document.getElementById('cleanzones').onclick = () => {
+  const all = (mapInfo ? mapInfo.paths : []).filter(z => z.type === 1 && z.state).map(z => z.id);
+  const ids = picked.zones.size ? all.filter(id => picked.zones.has(id)) : all;
+  if (!ids.length) return;
+  if (!confirm(picked.zones.size ? `Start a run that cleans just the ${ids.length} ticked zone${ids.length > 1 ? 's' : ''}?` : 'Start a run that cleans all the green zones?')) return;
+  setManual(false);
+  setTimeout(() => post('/api/maprun', { map: 1, type: 1, ids }), 1500);
+  goNote('Sent. She should set off to the green zones; tick "live" to watch her.');
+};
+
+document.getElementById('cleanrooms').onclick = () => {
+  const rms = (mapInfo ? mapInfo.rooms : []).filter(r => picked.rooms.has(r.id));
+  if (!rms.length || !confirm(`Start a run that cleans just: ${rms.map(r => r.name || 'Room ' + r.id).join(', ')}?`)) return;
+  setManual(false);
+  setTimeout(() => post('/api/maprun', { map: 1, type: 3, ids: rms.map(r => r.id) }), 1500);
+  goNote('Sent. Tick "live" to watch her.');
+};
+document.getElementById('mapauto').onchange = e => {
+  clearInterval(mapTimer); mapTimer = e.target.checked ? setInterval(refreshMap, 5000) : null;
+  if (mapTimer) refreshMap();
+};
+refreshMap(true);
+
+// ---- Saved map slots (tools/map_slots.sh on Lucy, via /api/maps)
+let herState = 'unknown', slotNames = [];
+const slotOut = t => { document.getElementById('slotout').textContent = t; };
+async function listSlots() {
+  const d = await fetch('/api/maps').then(r => r.json()).catch(e => ({ ok: false, out: String(e) }));
+  if (!d.ok) { slotOut(d.out || 'list failed'); return; }
+  herState = d.state;
+  slotNames = d.slots.map(s => s.name);
+  document.getElementById('slotcur').textContent = `In use now: ${d.current || '(no saved map)'}   ·   she reports: ${d.state}`;
+  const tab = document.getElementById('slottab');
+  tab.innerHTML = '';
+  for (const s of d.slots.sort((a, b) => (a.name[0] === '_') - (b.name[0] === '_') || a.name.localeCompare(b.name))) {
+    const tr = tab.insertRow();
+    if (s.name[0] === '_') tr.className = 'auto';
+    // preview drawn on the server from the slot's own map file (cached; first view takes a few s)
+    const pc = tr.insertCell();
+    if (s.size) {
+      const img = document.createElement('img');
+      img.loading = 'lazy'; img.className = 'slotprev'; img.alt = '';
+      img.src = `/api/mappreview?slot=${encodeURIComponent(s.name)}&size=${s.size}`;
+      img.onclick = () => img.classList.toggle('big');
+      pc.appendChild(img);
+    } else pc.textContent = '(no map file)';
+    const nc = tr.insertCell();
+    nc.innerHTML = `<b>${s.name}</b><br>${s.saved}<br>${s.size ? Math.round(s.size / 1024) + ' KB' : ''} <span class="slotinfo"></span>`;
+    if (s.size) fetch(`/api/mappreview?slot=${encodeURIComponent(s.name)}&size=${s.size}&info=1`).then(r => r.json()).then(i => {
+      if (i.area_m2 !== undefined) nc.querySelector('.slotinfo').textContent = `· ${i.area_m2} m² floor · ${i.w_m}×${i.h_m} m`;
+    }).catch(() => {});
+    const bc = tr.insertCell();
+    const b = document.createElement('button'); b.textContent = 'Load';
+    b.onclick = () => slotDo('load', s.name, `Load map "${s.name}"? Her current map is backed up first. She reports: ${herState} (only do this while she's docked).`);
+    bc.appendChild(b);
+    if (s.name !== '_guard') {
+      const del = document.createElement('button'); del.textContent = 'Delete';
+      del.onclick = () => slotDo('delete', s.name, `Delete saved map "${s.name}"? (It's moved to a _trash folder on Lucy, not destroyed.)`);
+      bc.appendChild(document.createElement('br')); bc.appendChild(del);
+    }
+  }
+}
+async function slotDo(mode, name, question) {
+  if (question && !confirm(question)) return;
+  slotOut(mode + ' ' + (name || '') + '... (load/blank take ~15 s)');
+  const d = await fetch('/api/maps', { method: 'POST', body: JSON.stringify({ mode, name }) })
+    .then(r => r.json()).catch(e => ({ ok: false, out: String(e) }));
+  slotOut((d.ok ? 'Done.\n' : 'Didn\'t work:\n') + d.out);
+  listSlots();
+  if (d.ok && mode !== 'save') setTimeout(() => refreshMap(true), 3000);
+}
+document.getElementById('slotsave').onclick = () => {
+  const name = prompt('Save her current map as (letters, digits, - and _):', 'home');
+  if (!name) return;
+  const n = name.trim();
+  slotDo('save', n, slotNames.includes(n) ? `There's already a saved map called "${n}". Replace it with her current map?` : null);
+};
+document.getElementById('slotblank').onclick = () => slotDo('blank', '',
+  `Start a fresh map for a new place? Her current map is backed up as a "_before_" slot, but SAVE it under a proper name first if you haven't. Experimental. She reports: ${herState}.`);
+document.getElementById('slotlist').onclick = listSlots;
+listSlots();
+
+// ---- joystick: /api/drive {lin, turn} every 150 ms while held (server stops her if it goes
+// quiet for 0.6 s), {lin:0, turn:0} on release. The server handles manual mode itself.
+const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+let drive = null, driveTimer = null;
+function sendDrive() {
+  lastDriveAt = Date.now();
+  const [lin, turn] = drive || [0, 0];
+  fetch('/api/drive', { method: 'POST', body: JSON.stringify({ lin, turn }) })
+    .then(r => r.json()).then(j => {
+      document.getElementById('drivestate').textContent =
+        j.ready ? 'Driving: ' + j.cmd.join(' ') : 'Getting manual mode...';
+    }).catch(() => {});
+}
+function setDrive(v) {
+  drive = v;
+  const R = 62;
+  const [lin, turn] = v || [0, 0];
+  knob.style.left = (62 + turn * R) + 'px';
+  knob.style.top = (62 - lin * R) + 'px';
+  if (v && !driveTimer) { sendDrive(); driveTimer = setInterval(sendDrive, 150); }
+  if (!v) { clearInterval(driveTimer); driveTimer = null; sendDrive(); setTimeout(() => { if (!drive) sendDrive(); }, 200); }   // stop twice, in case one is late
+}
+function stickAt(e) {
+  const r = stick.getBoundingClientRect();
+  let x = (e.clientX - r.left - r.width / 2) / (r.width / 2 - 28);
+  let y = (r.top + r.height / 2 - e.clientY) / (r.height / 2 - 28);
+  const m = Math.hypot(x, y);
+  if (m > 1) { x /= m; y /= m; }
+  return [y, x];
+}
+stick.addEventListener('pointerdown', e => { e.preventDefault(); stick.setPointerCapture(e.pointerId); setDrive(stickAt(e)); });
+stick.addEventListener('pointermove', e => { if (drive) setDrive(stickAt(e)); });
+['pointerup', 'pointercancel'].forEach(ev => stick.addEventListener(ev, () => setDrive(null)));
+const keys = new Set();
+function keyDrive(slow) {
+  const k = c => keys.has(c);
+  const lin = (k('ArrowUp') || k('w') ? 1 : 0) - (k('ArrowDown') || k('s') ? 1 : 0);
+  const turn = (k('ArrowRight') || k('d') ? 1 : 0) - (k('ArrowLeft') || k('a') ? 1 : 0);
+  const f = slow ? 0.4 : 1;
+  setDrive(lin || turn ? [lin * f, turn * (lin ? 0.7 : 0.8)] : null);
+}
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const c = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(c)) return;
+  e.preventDefault();
+  if (!keys.has(c)) { keys.add(c); keyDrive(e.shiftKey); }
+});
+addEventListener('keyup', e => {
+  const c = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (keys.delete(c)) keyDrive(e.shiftKey);
+});
+addEventListener('blur', () => { keys.clear(); if (drive) setDrive(null); });
+
+// ---- Say: text -> her speaker (/api/say)
+(function () {
+  const v = document.getElementById('sayvoice'), out = document.getElementById('sayout');
+  v.value = localStorage.getItem('sayVoice') || v.value;
+  v.onchange = () => localStorage.setItem('sayVoice', v.value);
+  const go = async () => {
+    const text = document.getElementById('saytext').value.trim();
+    if (!text) return;
+    out.textContent = 'making the voice...';
+    const d = await fetch('/api/say', { method: 'POST', body: JSON.stringify({ text, voice: v.value }) })
+      .then(r => r.json()).catch(e => ({ ok: false, out: String(e) }));
+    out.textContent = d.ok ? 'said it.' : "didn't work: " + d.out;
+  };
+  document.getElementById('saygo').onclick = go;
+  document.getElementById('saytext').onkeydown = e => { if (e.key === 'Enter') go(); };
+})();
+// ---- status, run controls, volume and schedule: the old control page's (:8080) features, via
+// /api/robot/... on this server (proxied to capture_server). Status every 5 s.
+const robot = (path, body) => body === undefined
+  ? fetch('/api/robot/' + path).then(r => r.json())
+  : fetch('/api/robot/' + path, { method: 'POST', body: JSON.stringify(body) }).then(r => r.json());
+const command = (c, value) => robot('command', value === undefined ? { command: c } : { command: c, value: String(value) });
+let volTouched = 0;
+async function pollStatus() {
+  try {
+    const s = await robot('status');
+    const name = s.status_name || 'unknown';
+    const dot = document.getElementById('statdot');
+    dot.className = 'dot ' + (/dock|charg|full/i.test(name) ? 'docked' : /error|stuck|lost/i.test(name) ? 'err' : /clean|work|return|spot|manual/i.test(name) ? 'busy' : '');
+    const sch = s.schedule || {};
+    document.getElementById('nextchip').textContent = sch.enabled && sch.next_run ? '⏰ ' + new Date(sch.next_run).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    document.getElementById('stattext').textContent = `${name[0].toUpperCase() + name.slice(1)} · ${s.battery ?? '?'}%` +
+      (s.blower != null && s.blower !== '' ? ` · suction ${s.blower}` : '') + (s.connected === false ? ' · offline' : '');
+    if (s.blower !== undefined && s.blower !== '') showSuction(+s.blower);
+    const idle = /dock|charg|full|sleep/i.test(name);
+    // she's set off: an automatic Off comes back on
+    if (wasIdle && !idle && camAuto && camWanted()) setMode(lastCam(), true);
+    // on the dock, the camera times out after 10 minutes with nobody touching the page
+    if (idle && !window.LUCY_CAM_OFF && Date.now() - Math.max(camOnAt, lastTouch) > 600000) autoOff('10 minutes on the dock');
+    wasIdle = idle;
+    if (s.volume !== undefined && Date.now() - volTouched > 8000) {
+      document.getElementById('volume').value = +s.volume; document.getElementById('volval').textContent = s.volume;
+    }
+    if (s.schedule) showSchedule(s.schedule);
+  } catch (e) { document.getElementById('stattext').textContent = 'no status'; }
+}
+pollStatus(); setInterval(() => { if (!document.hidden) pollStatus(); }, 5000);
+
+document.getElementById('startbtn').onclick = () => { if (confirm('Start a normal cleaning run?')) command('start').then(pollStatus); };
+document.getElementById('pausebtn').onclick = () => command('pause').then(pollStatus);
+document.getElementById('locate').onclick = () => command('locate');
+document.getElementById('dockfloat').onclick = () => document.getElementById('dock').click();
+const vol = document.getElementById('volume');
+vol.oninput = () => { volTouched = Date.now(); document.getElementById('volval').textContent = vol.value; };
+vol.onchange = () => { volTouched = Date.now(); post('/api/speaker', { value: 'setVolume:' + vol.value }); };
+
+// schedule
+const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const pickedDays = new Set(['mon', 'tue', 'wed', 'thu', 'fri']);
+for (const d of DAYS) {
+  const b = document.createElement('button'); b.className = 'day' + (pickedDays.has(d) ? ' on' : ''); b.textContent = d[0].toUpperCase() + d.slice(1, 3);
+  b.onclick = () => { pickedDays.has(d) ? pickedDays.delete(d) : pickedDays.add(d); b.classList.toggle('on'); };
+  document.getElementById('scheddays').appendChild(b);
+}
+let lastSched = '';
+function showSchedule(s) {
+  const key = JSON.stringify(s);
+  if (key === lastSched) return;
+  lastSched = key;
+  document.getElementById('schedon').checked = !!s.enabled;
+  document.getElementById('schednext').textContent = s.next_run ? 'next: ' + new Date(s.next_run).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' (' + schedLabel(s.next_command) + ')' : '';
+  const tab = document.getElementById('schedtab'); tab.innerHTML = '';
+  (s.entries || []).forEach((e, i) => {
+    const tr = tab.insertRow();
+    tr.insertCell().textContent = e.time;
+    tr.insertCell().textContent = schedLabel(e.command + (e.value ? ':' + e.value : '')) + (e.suction != null ? ` (suction ${e.suction})` : '');
+    tr.insertCell().textContent = e.days ? e.days.map(d => d[0].toUpperCase() + d.slice(1, 3)).join(' ') : 'every day';
+    const b = document.createElement('button'); b.textContent = 'Remove';
+    b.onclick = () => { if (confirm(`Remove ${e.time} ${schedLabel(e.command + (e.value ? ':' + e.value : ''))}?`)) robot('schedule/remove', { index: i }).then(pollStatus); };
+    tr.insertCell().appendChild(b);
+  });
+}
+document.getElementById('schedon').onchange = () => robot('schedule/toggle', {}).then(pollStatus);
+// Zones and rooms: entries are "zones" / "rooms" with value "all" or ids ("3,5"); her old server
+// (capture_server) hands them to this server's /api/maprun when they fire, which checks the ids
+// against the map in use (2026-10-26).
+// (map 1 = the map in use; rows for map 100 are her side copy's)
+const zoneName = id => { const z = (mapInfo ? mapInfo.paths : []).find(z => z.map === 1 && z.type === 1 && z.id === +id); return z && z.name && !/^\d+$/.test(z.name) ? z.name : 'zone ' + (z && z.name || id); };
+const roomName = id => { const r = (mapInfo ? mapInfo.rooms : []).find(r => r.map === 1 && r.id === +id); return r && r.name || 'room ' + id; };
+function schedLabel(c) {
+  if (!c) return '';
+  const [k, v] = c.split(':');
+  if (k === 'start') return 'clean everywhere';
+  if (k === 'zones') return v === 'all' || !v ? 'clean all green zones' : 'clean ' + v.split(',').map(zoneName).join(', ');
+  if (k === 'rooms') return 'clean ' + v.split(',').map(roomName).join(', ');
+  if (k === 'security') return 'security ' + v;
+  return c;
+}
+const schedPicked = new Set();
+for (const v of SUCTION) {      // suction for scheduled runs: 88 (her normal) by default
+  const o = document.createElement('option'); o.value = v; o.textContent = v === 88 ? '88 (normal)' : v; o.selected = v === 88;
+  document.getElementById('schedsuction').appendChild(o);
+}
+document.getElementById('schedcmd').onchange = () => {
+  const k = document.getElementById('schedcmd').value, box = document.getElementById('schedpick');
+  schedPicked.clear(); box.innerHTML = '';
+  box.classList.toggle('hidden', k !== 'zones' && k !== 'rooms');
+  document.getElementById('schedsuc').classList.toggle('hidden', k === 'dock' || k.startsWith('security'));
+  const items = k === 'zones' ? (mapInfo ? mapInfo.paths : []).filter(z => z.map === 1 && z.type === 1 && z.state).map(z => [z.id, zoneName(z.id)])
+    : k === 'rooms' ? (mapInfo ? mapInfo.rooms : []).filter(r => r.map === 1).map(r => [r.id, roomName(r.id)]) : [];
+  for (const [id, name] of items) {
+    const b = document.createElement('button'); b.className = 'day'; b.textContent = name;
+    b.onclick = () => { schedPicked.has(id) ? schedPicked.delete(id) : schedPicked.add(id); b.classList.toggle('on'); };
+    box.appendChild(b);
+  }
+  if ((k === 'zones' || k === 'rooms') && !items.length) box.textContent = k === 'zones' ? 'No green zones on the map yet.' : 'No rooms on the map yet.';
+};
+document.getElementById('schedadd').onclick = () => {
+  let [command, value] = document.getElementById('schedcmd').value.split(':');
+  if (command === 'zones' || command === 'rooms') {
+    if (!value) { if (!schedPicked.size) { alert('Tap the ' + command + ' to clean first.'); return; } value = [...schedPicked].join(','); }
+  }
+  const entry = { time: document.getElementById('schedtime').value, command };
+  if (value) entry.value = value;
+  if (command !== 'dock' && command !== 'security') entry.suction = +document.getElementById('schedsuction').value;
+  if (!entry.time) return;
+  if (pickedDays.size && pickedDays.size < 7) entry.days = DAYS.filter(d => pickedDays.has(d));
+  robot('schedule/add', entry).then(pollStatus);
+};
+
+// small bits: camera-on shortcut, driving mode opens the stick, link to the old page
+document.querySelectorAll('.camon').forEach(b => b.onclick = () => setMode(lastCam()));
+// Live panel: closed on load (no camera or live-map traffic until it's opened). Inside it, the
+// Camera / Live map / Speak buttons each fold their part away (remembered on this device); a folded
+// camera or live map pulls nothing from her. Driving mode shows camera + live map, Say below the stick.
+const live = document.getElementById('livecard');
+window.LIVE_CLOSED = !DRIVING;
+function showSecs() {
+  const parkOn = document.getElementById('parkon');
+  const on = { cam: DRIVING || SECS.cam, map: DRIVING || parkOn.checked, say: DRIVING || SECS.say };
+  document.querySelectorAll('#liveseg button').forEach(b => b.classList.toggle('on', on[b.dataset.sec]));
+  document.getElementById('camcard').classList.toggle('hidden', !on.cam);
+  document.getElementById('saybox').classList.toggle('hidden', !on.say);
+  document.querySelector('.livegrid').classList.toggle('one', !(on.cam && on.map));
+  dispatchEvent(new Event('resize'));
+}
+function toggleSec(sec, on) {
+  if (sec === 'map') {
+    const parkOn = document.getElementById('parkon');
+    parkOn.checked = on; parkOn.onchange();
+  } else {
+    SECS[sec] = on; localStorage.setItem('liveSecs', JSON.stringify(SECS));
+  }
+  if (sec === 'cam') setMode(on ? lastCam() : 'off', true);
+  showSecs();
+}
+document.querySelectorAll('#liveseg button').forEach(b => b.onclick = () => b.dataset.sec === 'drive' ? (location.search = '?drive')
+  : toggleSec(b.dataset.sec, !b.classList.contains('on')));
+if (DRIVING) { live.open = true; document.querySelector('main').appendChild(document.getElementById('saybox')); }
+else setMode('off', true);
+showSecs();
+live.ontoggle = () => {
+  if (DRIVING) return;
+  window.LIVE_CLOSED = !live.open;
+  if (live.open) { setMode(SECS.cam ? lastCam() : 'off', true); dispatchEvent(new Event('resize')); }
+  else setMode('off', true);
+};
+// page in the background for a minute: camera off (her Wi-Fi and the phone's battery)
+let hiddenTimer = null;
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(hiddenTimer);
+  if (document.hidden) hiddenTimer = setTimeout(() => autoOff('page in the background'), 60000);
+});
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true });
+// ---- run log: last 10 when the Runs fold opens; "Show all" opens /runs (runs.js draws both)
+(function () {
+  const card = document.getElementById('runscard');
+  card.ontoggle = () => { if (card.open) loadRuns(document.getElementById('runlist'), document.getElementById('runsnote'), 10); };
+  document.getElementById('runsrefresh').onclick = () => loadRuns(document.getElementById('runlist'), document.getElementById('runsnote'), 10, true);
+})();
+// ---- her name in the header (settings.json via /api/settings): fits LUCY's width, shrinking
+// and then wrapping for longer names
+(function () {
+  const logo = document.getElementById('logo'), base = parseFloat(getComputedStyle(logo).fontSize);
+  logo.style.width = logo.getBoundingClientRect().width + 'px';     // LUCY's width
+  function show(name) {
+    name = (name || 'LUCY').toUpperCase();
+    logo.textContent = name; document.title = name[0] + name.slice(1).toLowerCase();
+    logo.style.whiteSpace = 'nowrap'; logo.style.letterSpacing = ''; logo.style.fontSize = base + 'px';
+    let f = base;
+    while (logo.scrollWidth > logo.clientWidth + 1 && f > base * 0.6) { f -= 0.5; logo.style.fontSize = f + 'px'; }
+    if (logo.scrollWidth > logo.clientWidth + 1) {            // still too long: two lines (at spaces)
+      logo.style.whiteSpace = 'normal'; logo.style.letterSpacing = '.06em';
+      f = base * 0.75; logo.style.fontSize = f + 'px';
+      while ((logo.scrollWidth > logo.clientWidth + 1 || logo.clientHeight > f * 2.3) && f > 8) { f -= 0.5; logo.style.fontSize = f + 'px'; }
+    }
+  }
+  fetch('/api/settings').then(r => r.json()).then(s => { show(s.name); document.getElementById('namein').value = s.name || ''; }).catch(() => {});
+  document.getElementById('namesave').onclick = () => {
+    const name = document.getElementById('namein').value.trim();
+    fetch('/api/settings', { method: 'POST', body: JSON.stringify({ name }) }).then(r => r.json()).then(s => show(s.name));
+  };
+})();
+// ---- security mode (security.py): her own motion detection while docked; clips listed here
+(function () {
+  const card = document.getElementById('seccard'), on = document.getElementById('secon'), list = document.getElementById('seclist');
+  const note = document.getElementById('secnote'), tg = document.getElementById('secnotify');
+  let timer = null;
+  function show(d) {
+    on.checked = !!d.on;
+    list.innerHTML = '';
+    for (const e of d.events.slice(0, 24)) {
+      const f = document.createElement('figure');
+      const img = document.createElement('img'); img.src = `/security/${e.t}.jpg`; img.loading = 'lazy';
+      const cap = document.createElement('figcaption');
+      cap.textContent = new Date(e.t * 1000).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      f.append(img, cap);
+      f.onclick = () => { const big = f.classList.toggle('big'); img.src = `/security/${e.t}.${big && e.gif ? 'gif' : 'jpg'}`; };
+      list.appendChild(f);
+    }
+    if (!d.events.length) list.innerHTML = '<span class="note">Nothing caught yet.</span>';
+  }
+  const load = check => fetch('/api/security' + (check ? '?check=1' : '')).then(r => r.json()).then(show).catch(() => {});
+  card.ontoggle = () => {
+    clearInterval(timer);
+    if (card.open) { load(true); timer = setInterval(() => !document.hidden && load(false), 15000); }
+  };
+  on.onchange = () => {
+    note.textContent = on.checked ? 'Turning it on…' : 'Turning it off…';
+    fetch('/api/security', { method: 'POST', body: JSON.stringify({ on: on.checked }) }).then(r => r.json()).then(d => {
+      show(d);
+      note.textContent = d.on ? 'Watching. She stays on the dock, silently; tap a picture to play its clip.' : 'Off.';
+    });
+  };
+  fetch('/api/settings').then(r => r.json()).then(s => { tg.checked = s.secnotify !== false; document.getElementById('ntfyin').value = s.ntfy || ''; });
+  document.getElementById('ntfysave').onclick = () => post('/api/settings', { ntfy: document.getElementById('ntfyin').value.trim() });
+  tg.onchange = () => post('/api/settings', { secnotify: tg.checked });
+})();
+document.getElementById('oldpage').href = `http://${location.hostname}:8080/`;
+// ---- video tests: live switches on the server (/api/lab) + what the feed is doing
+(function () {
+  const box = document.getElementById('lab');
+  const sync = lab => box.querySelectorAll('[data-lab]').forEach(el => {
+    const v = lab[el.dataset.lab];
+    if (el.type === 'checkbox') el.checked = v; else el.value = v;
+  });
+  fetch('/api/lab').then(r => r.json()).then(sync).catch(() => {});
+  box.querySelectorAll('[data-lab]').forEach(el => el.onchange = () => {
+    fetch('/api/lab', { method: 'POST', body: JSON.stringify({ [el.dataset.lab]: el.type === 'checkbox' ? el.checked : el.value }) })
+      .then(r => r.json()).then(sync).catch(() => {});
+  });
+  let prev = null, prevQ = null;
+  setInterval(async () => {
+    if (!box.open) { prev = null; return; }
+    try {
+      const st = (await fetch('/status').then(r => r.json())).main, t = performance.now();
+      const v = document.getElementById('main'), q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+      if (prev) {
+        const s = (t - prev.t) / 1000;
+        let txt = `from Lucy ${((st.frames - prev.frames) / s).toFixed(1)} fps, torn ${st.torn - prev.torn}, held back ${st.skipped - prev.skipped} (last ${s.toFixed(0)} s)`;
+        if (q && prevQ) txt += `; this screen showed ${((q.totalVideoFrames - prevQ.totalVideoFrames) / s).toFixed(1)} fps, dropped ${q.droppedVideoFrames - prevQ.droppedVideoFrames}`;
+        document.getElementById('labstats').textContent = txt;
+      }
+      prev = { ...st, t }; prevQ = q && { totalVideoFrames: q.totalVideoFrames, droppedVideoFrames: q.droppedVideoFrames };
+    } catch (e) {}
+  }, 3000);
+})();
+</script><script src="/runs.js"></script><script src="/park_view.js"></script></body></html>

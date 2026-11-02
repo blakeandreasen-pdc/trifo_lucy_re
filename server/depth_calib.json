@@ -1,0 +1,6 @@
+{
+ "a": -0.003852694288217203,
+ "b": 0.10659756179781175,
+ "c": 0.07110214893131528,
+ "note": "floor plane in ToF camera frame y=a*x+b*z+c (x right, y down, z forward; metres), fitted 2026-10-24 from captures/depth/wall2.bin"
+}
