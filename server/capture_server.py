@@ -10,6 +10,7 @@ Logs ALL traffic for protocol analysis.
 """
 
 import json
+import urllib.request
 import ssl
 import os
 import sys
@@ -22,6 +23,21 @@ import threading
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
+
+# Map reader for live SHM map data
+try:
+    from map_reader import get_live_map
+    HAS_MAP_READER = True
+except ImportError:
+    HAS_MAP_READER = False
+
+# Camera snapshots over SSH (rooted Lucy only)
+try:
+    from lucy_live import get_camera_png
+    HAS_LUCY_LIVE = True
+except ImportError:
+    HAS_LUCY_LIVE = False
+camera_lock = threading.Lock()  # one SSH grab at a time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -77,6 +93,7 @@ def load_config():
         "dispatch_port": server.get("dispatch_port", 7990),
         "mqtt_port": server.get("mqtt_port", 17766),
         "https_port": server.get("https_port", 443),
+        "http_port": server.get("http_port", 80),
         "control_port": server.get("control_port", 9999),
         "api_port": server.get("api_port", 8080),
         "cert_file": os.path.join(BASE_DIR, server.get("cert_file", "mqtt_cert.pem")),
@@ -159,6 +176,11 @@ robot_status = {
 }
 robot_status_lock = threading.Lock()
 
+# Device response buffer — captures decoded tx_data (op:0403) QLRPDataItem replies
+device_responses = []  # list of {"ts": ..., "cmd": ..., "data": ..., "key": ..., "raw_size": ...}
+device_responses_lock = threading.Lock()
+MAX_RESPONSES = 100
+
 
 def update_robot_status(json_payload):
     """Parse a status update from Lucy and cache it."""
@@ -204,7 +226,7 @@ OPCODE_NAMES = {
     0x0b06: "data_b06 (updps alt)",
     0x0102: "msg_0102",
     0x0103: "msg_0103",
-    0x0303: "file_upload",
+    0x0303: "info_request (iot_get_info)",
     0x0403: "msg_0403",
 }
 
@@ -237,7 +259,7 @@ def log_msg(msg):
 # Encryption: QLCloud rolling XOR on bytes [4 .. total_len-4), seed=0x7ecf
 # CRC: CRC-16/MODBUS (poly 0x8005 reflected, init=0xFFFF) over decrypted [0..10+N)
 #
-# Request data: MAC address as ASCII "c0:e7:bf:4a:97:d8"
+# Request data: MAC address as ASCII "aa:bb:cc:dd:ee:ff"
 # Response data: broker address as ASCII "IP:PORT" e.g. "192.168.1.35:17766"
 # ---------------------------------------------------------------------------
 
@@ -554,7 +576,7 @@ def send_downdps_command(dp_id, value_str):
 
     active_seq_counter += 1
     # Use subid from device state (learned during handshake), fall back to config/default
-    subid = DEVICE_STATE.get("device", {}).get("subid", "LUCPB4ACC26M0017")
+    subid = DEVICE_STATE.get("device", {}).get("subid", "LUCXXXXXXXXXXXXX")
     cmd_json = {
         "data": [{"i": dp_id, "v": value_str}],
         "subid": subid,
@@ -576,6 +598,96 @@ def send_downdps_command(dp_id, value_str):
     except Exception as e:
         log_msg(f"ERROR sending command: {e}")
         return False
+
+
+def send_raw_opcode(opcode_hi, opcode_lo, payload_obj, flags_hi=0x01, flags_lo=0x00):
+    """Send an MQTT message with a custom QLCloud opcode.
+    payload_obj: dict (sent as JSON) or bytes (sent as raw binary).
+    flags_hi, flags_lo: header bytes 8-9 (flags field).
+    """
+    global active_seq_counter
+    with active_conn_lock:
+        conn = active_mqtt_conn
+        topic = active_subscribe_topic
+    if conn is None or topic is None:
+        log_msg("ERROR: No active MQTT connection to Lucy")
+        return False
+
+    active_seq_counter += 1
+
+    if isinstance(payload_obj, (bytes, bytearray)):
+        # Raw binary payload
+        body = bytes(payload_obj)
+        total_len = 16 + len(body)
+        header = bytearray(16)
+        struct.pack_into(">I", header, 0, total_len)
+        header[4] = 0x00; header[5] = 0x10  # msg_type defaults
+        header[6] = 0x02; header[7] = 0x01  # cmd_type defaults
+        header[8] = flags_hi; header[9] = flags_lo  # flags
+        header[10] = opcode_hi; header[11] = opcode_lo
+        struct.pack_into(">I", header, 12, active_seq_counter)
+        ql_payload = bytes(header) + body
+        log_msg(f">>> SENT RAW OPCODE: 0x{opcode_hi:02x}{opcode_lo:02x} seq={active_seq_counter} ({len(body)} bytes binary)")
+    else:
+        # JSON payload
+        ql_payload = build_qlcloud_mqtt_payload(
+            payload_obj,
+            flags3=opcode_hi, flags4=opcode_lo,
+            seq=active_seq_counter
+        )
+        log_msg(f">>> SENT RAW OPCODE: 0x{opcode_hi:02x}{opcode_lo:02x} seq={active_seq_counter}")
+        log_msg(f"    JSON: {json.dumps(payload_obj)}")
+
+    mqtt_pkt = make_mqtt_publish(topic, ql_payload)
+    try:
+        with active_conn_lock:
+            active_mqtt_conn.sendall(mqtt_pkt)
+        return True
+    except Exception as e:
+        log_msg(f"ERROR sending raw opcode: {e}")
+        return False
+
+
+# Opcode 0x0303 is NOT a file upload. Ghidra (2026-10-16) shows it is QLCloud's iot_get_info():
+# Lucy asks the cloud for info type 0 = bound owner, 1 = shared users, 2 = bind status, with
+# body {"req":{"token":...},"data":{"type":N,"size":<rx buffer-128>}}, and repeats every ~10 s
+# because nothing answers. The reply (same opcode) is parsed by qlcloud_process_info as the
+# WHOLE body: {"t": N, "v": ...}  - our old {"res":{"errcode":0}} was ignored (no "t").
+#   type 0: {"t":0,"v":{"i":"<user id>","e":"<email>","c":"<?>","p":"<phone>","n":"<name>"}}
+#           (v = null -> "no bound user"). DANGER: if "i" differs from her stored last bind
+#           user id (/data/user/app/bind_user_id) she logs DEV_STA_UNBIND and unbinds.
+#   type 2: {"t":2,"v":{"b":1}}  (b = 0 after being bound triggers HandleUnbindUser!)
+# Keep disabled until BIND_USER_ID is set to the exact contents of bind_user_id.
+INFO_REPLY_ENABLED = True
+BIND_USER_ID = ""       # from /data/user/app/bind_user_id (read 2026-10-16)
+
+
+def info_reply_body(info_type):
+    if info_type == 0 and BIND_USER_ID:
+        return {"t": 0, "v": {"i": BIND_USER_ID, "e": "", "c": "", "p": "", "n": "local"}}
+    if info_type == 2:
+        return {"t": 2, "v": {"b": 1}}
+    return None
+
+
+def send_info_response(seq, info_type):
+    if not INFO_REPLY_ENABLED:
+        return
+    body = info_reply_body(info_type)
+    if body is None:
+        return
+    with active_conn_lock:
+        conn = active_mqtt_conn
+        topic = active_subscribe_topic
+    if not conn or not topic:
+        return
+    ql_payload = build_qlcloud_mqtt_payload(body, flags3=0x03, flags4=0x03, seq=seq)
+    try:
+        with active_conn_lock:
+            active_mqtt_conn.sendall(make_mqtt_publish(topic, ql_payload))
+        log_msg(f"  >>> Sent info response (seq={seq}, type={info_type}) {body}")
+    except Exception as e:
+        log_msg(f"  info response error: {e}")
 
 
 def send_heartbeat_response(seq):
@@ -714,15 +826,59 @@ def run_control_server(port):
 
             log_msg(f"Control command received: {data}")
 
+            # Parse: "rxdata:key:cmd:data" — send QLRPDataItem via opcode 0x0402
+            # Example: rxdata:2:ROBOT_CTRL:forward
+            if data.startswith("rxdata:"):
+                # Format: rxdata:key:cmd:data  OR  rxdata:key:cmd:data:head
+                parts = data.split(":", 4)
+                key = parts[1] if len(parts) > 1 else "2"
+                cmd = parts[2] if len(parts) > 2 else ""
+                payload_data = parts[3] if len(parts) > 3 else ""
+                head = parts[4] if len(parts) > 4 else "rq"
+                qlrp = json.dumps({
+                    "head": head, "key": key, "cmd": cmd,
+                    "sum": 0, "index": 0, "requestid": f"ctrl{int(time.time())}",
+                    "data": payload_data
+                })
+                # Get auth token from device state
+                token = DEVICE_STATE.get("device", {}).get("auth_token", "")
+                if not token:
+                    log_msg("ERROR: No auth token available for rxdata")
+                    result = False
+                else:
+                    json_bytes = qlrp.encode('utf-8')
+                    body = b',' + token.encode('ascii') + b'\x00\x00\x00\x00' + bytes([len(json_bytes) & 0xff]) + json_bytes
+                    result = send_raw_opcode(0x04, 0x02, body, flags_hi=0x03, flags_lo=0x00)
+                    log_msg(f">>> SENT RXDATA: key={key} cmd={cmd} data={payload_data}")
+
+            # Parse: "opcode:XXYY:json_or_hex" format for raw opcode sends
+            # JSON: opcode:0402:{"cmd":"test"}
+            # Binary: opcode:0402:hex:0a0b0c0d...
+            elif data.startswith("opcode:"):
+                parts = data.split(":", 3)
+                if len(parts) >= 3:
+                    opcode_hex = parts[1]
+                    opcode_hi = int(opcode_hex[:2], 16)
+                    opcode_lo = int(opcode_hex[2:], 16)
+                    if len(parts) >= 4 and parts[2] == "hex":
+                        # Binary payload as hex string
+                        payload = bytes.fromhex(parts[3])
+                        result = send_raw_opcode(opcode_hi, opcode_lo, payload)
+                    else:
+                        json_str = parts[2] if len(parts) == 3 else ":".join(parts[2:])
+                        json_obj = json.loads(json_str)
+                        result = send_raw_opcode(opcode_hi, opcode_lo, json_obj)
+                else:
+                    result = False
             # Parse: "dp_id:value" format
-            if ":" in data:
+            elif ":" in data:
                 dp_id_str, value = data.split(":", 1)
                 dp_id = int(dp_id_str)
+                result = send_downdps_command(dp_id, value)
             else:
                 dp_id = 2
                 value = data
-
-            result = send_downdps_command(dp_id, value)
+                result = send_downdps_command(dp_id, value)
             response = "OK" if result else "ERROR: No active connection"
             conn.sendall(response.encode('utf-8'))
         except Exception as e:
@@ -1124,6 +1280,55 @@ class ProtocolHandler:
                     if opcode_for_status in (0x0503, 0x0b06):  # updps or alt updps
                         update_robot_status(json_payload)
 
+                # Capture tx_data (op:0403) responses — decode QLRPDataItem from body
+                if len(payload) >= 12:
+                    opcode_for_tx = struct.unpack(">H", payload[10:12])[0]
+                    if opcode_for_tx == 0x0403:
+                        body = payload[16:]
+                        # Body format: ,<token>\x00\x00\x00\x00<len><json>
+                        json_start = body.find(b'{')
+                        if json_start >= 0:
+                            json_end = body.rfind(b'}')
+                            if json_end > json_start:
+                                try:
+                                    qlrp = json.loads(body[json_start:json_end+1])
+                                    resp_entry = {
+                                        "ts": datetime.now().isoformat(),
+                                        "cmd": qlrp.get("cmd", ""),
+                                        "data": qlrp.get("data", ""),
+                                        "key": qlrp.get("key", ""),
+                                        "head": qlrp.get("head", ""),
+                                        "requestid": qlrp.get("requestid", ""),
+                                        "sum": qlrp.get("sum", 0),
+                                        "index": qlrp.get("index", 0),
+                                        "lz4_source_size": qlrp.get("lz4_source_size", 0),
+                                        "raw_size": len(payload),
+                                    }
+                                    with device_responses_lock:
+                                        device_responses.append(resp_entry)
+                                        if len(device_responses) > MAX_RESPONSES:
+                                            device_responses.pop(0)
+                                    log_msg(f"    >>> DEVICE RESPONSE: cmd={qlrp.get('cmd','')} data={qlrp.get('data','')} key={qlrp.get('key','')}")
+                                    if qlrp.get("cmd") == "ALL_INFO_JSON":
+                                        # her status reports only come on a change, so after a restart
+                                        # the page had nothing; this reply carries the same basics
+                                        try:
+                                            info = json.loads(qlrp.get("data") or "{}")
+                                            with robot_status_lock:
+                                                for k, src in (("status", "clean_state"), ("battery", "battery"), ("blower", "blower")):
+                                                    if info.get(src) not in (None, "", "-1"):
+                                                        robot_status[k] = info[src]
+                                                robot_status["last_update"] = datetime.now().isoformat()
+                                                robot_status["connected"] = True
+                                        except (ValueError, TypeError, AttributeError):
+                                            pass
+                                except json.JSONDecodeError as e:
+                                    # Used to be silently dropped - log it so big/odd replies show up
+                                    log_msg(f"    !!! tx_data (0x0403) JSON decode failed ({e}); "
+                                            f"{len(body)} bytes, head={body[:120]!r} tail={body[-60:]!r}")
+                        else:
+                            log_msg(f"    !!! tx_data (0x0403) without JSON: {len(body)} bytes head={body[:80]!r}")
+
                 # Send PUBACK if QoS > 0
                 if pub["qos"] > 0 and pub["packet_id"] is not None:
                     conn.sendall(make_mqtt_puback(pub["packet_id"]))
@@ -1134,6 +1339,13 @@ class ProtocolHandler:
                     ql_opcode_check = struct.unpack(">H", payload[10:12])[0]
                     if ql_opcode_check == 0x0301:  # heartbeat
                         send_heartbeat_response(seq_num)
+                    elif ql_opcode_check == 0x0303:  # info request (owner / bind status)
+                        info_type = None
+                        try:
+                            info_type = int(((json_payload or {}).get("data") or {}).get("type"))
+                        except (TypeError, ValueError, AttributeError):
+                            pass
+                        send_info_response(seq_num, info_type)
 
                 # Detect and respond to registration/auth messages
                 if json_payload and "data" in json_payload and isinstance(json_payload.get("data"), dict):
@@ -1142,7 +1354,7 @@ class ProtocolHandler:
                     if "dev_sign" in json_payload["data"] and self.subscribe_topic:
                         # AUTHENTICATION packet (state 10) — has dev_sign
                         log_msg("  *** Auth request detected! Sending auth response...")
-                        sn = json_payload["data"].get("dev_id", DEVICE_STATE.get("device", {}).get("subid", "LUCPB4ACC26M0017"))
+                        sn = json_payload["data"].get("dev_id", DEVICE_STATE.get("device", {}).get("subid", "LUCXXXXXXXXXXXXX"))
                         auth_token = hashlib.sha256(
                             f"lucy_auth_{time.time()}".encode()).hexdigest()[:44]
                         auth_response = {
@@ -1186,7 +1398,7 @@ class ProtocolHandler:
                     elif "product_sign" in json_payload["data"] and self.subscribe_topic:
                         # REGISTRATION packet (state 7) — has product_sign, no dev_sign
                         log_msg("  *** Registration request detected! Sending reg response...")
-                        sn = json_payload["data"].get("sn", "LUCPB4ACC26M00174")
+                        sn = json_payload["data"].get("sn", "LUCXXXXXXXXXXXXX0")
                         mac = json_payload["data"].get("mac", "")
                         product_id = json_payload.get("req", {}).get("product_id")
 
@@ -1259,10 +1471,15 @@ class ProtocolHandler:
 
 def run_protocol_server(port):
     """Run the protocol-detecting server on the given port."""
-    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_sock.bind(("0.0.0.0", port))
-    server_sock.listen(5)
+    try:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_sock.bind(("0.0.0.0", port))
+        server_sock.listen(5)
+    except (OSError, PermissionError) as e:
+        log_msg(f"WARNING: could not bind port {port}: {e}")
+        log_msg(f"  (If this is port 443/80, run as administrator or disable conflicting services)")
+        return
     log_msg(f"Protocol capture server listening on port {port}")
 
     while True:
@@ -1312,11 +1529,16 @@ class VoicePackageHandler(BaseHTTPRequestHandler):
 
 
 def run_https_server(port):
-    server = HTTPServer(("0.0.0.0", port), VoicePackageHandler)
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain(CERT_FILE, KEY_FILE)
-    ctx.minimum_version = ssl.TLSVersion.MINIMUM_SUPPORTED
-    server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    try:
+        server = HTTPServer(("0.0.0.0", port), VoicePackageHandler)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(CERT_FILE, KEY_FILE)
+        ctx.minimum_version = ssl.TLSVersion.MINIMUM_SUPPORTED
+        server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    except (OSError, PermissionError) as e:
+        log_msg(f"WARNING: could not bind HTTPS port {port}: {e}")
+        log_msg(f"  (Voice package requests will fail. Run as admin or free port {port}.)")
+        return
     log_msg(f"HTTPS capture server listening on port {port}")
     server.serve_forever()
 
@@ -1326,9 +1548,11 @@ def run_https_server(port):
 # ---------------------------------------------------------------------------
 
 # Status name mapping
+# WARNING: Lucy's status reporting via MQTT is unreliable — values are often
+# stale or significantly delayed. Do not use for automated decision-making.
 STATUS_NAMES = {
-    "1": "cleaning", "2": "cleaning", "3": "paused", "4": "error",
-    "5": "returning", "6": "charging", "12": "docked",
+    "0": "idle", "1": "cleaning", "2": "cleaning", "3": "paused", "4": "error",
+    "5": "returning", "6": "charging", "12": "docked", "20": "scanning",
 }
 
 # Scheduler state
@@ -1438,10 +1662,59 @@ class APIHandler(BaseHTTPRequestHandler):
                 },
             })
 
+        elif path == "/api/responses":
+            # Return recent device responses (decoded tx_data QLRPDataItem replies)
+            with device_responses_lock:
+                resps = list(device_responses)
+            # Optional: ?since=<index> to get only new responses
+            since = 0
+            if "?" in self.path:
+                for param in self.path.split("?")[1].split("&"):
+                    if param.startswith("since="):
+                        since = int(param.split("=")[1])
+            self._send_json({"responses": resps[since:], "total": len(resps)})
+
         elif path == "/api/schedule":
             with scheduler_lock:
                 sched = dict(scheduler_state)
             self._send_json(sched)
+
+        elif path == "/api/map":
+            if not HAS_MAP_READER:
+                self._send_json({"ok": False, "error": "map_reader module not available"}, 500)
+                return
+            try:
+                result = get_live_map()
+                self._send_json(result)
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+            return
+
+        elif path == "/api/camera.png":
+            # Newest RGB camera frame from Lucy's SHM (needs SSH / rooted Lucy).
+            # X-Frame-Age says how old it is - the camera stops while she's docked.
+            if not HAS_LUCY_LIVE:
+                self._send_json({"ok": False, "error": "lucy_live module not available"}, 500)
+                return
+            try:
+                with camera_lock:
+                    png, info = get_camera_png()
+                if not png:
+                    self._send_json({"ok": False, **info}, 503)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(png)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Expose-Headers", "X-Frame-Age")
+                if info.get("age_s") is not None:
+                    self.send_header("X-Frame-Age", f"{info['age_s']:.1f}")
+                self.end_headers()
+                self.wfile.write(png)
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+            return
 
         elif path == "/api/events":
             # Server-Sent Events stream
@@ -1525,6 +1798,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 command = body.get("command", "")
                 days = body.get("days")  # optional list like ["mon","tue"]
                 value = body.get("value")  # optional
+                suction = body.get("suction")  # optional: blowerMode set just before it fires
 
                 if not time_str or not command:
                     self._send_json({"error": "need 'time' (HH:MM) and 'command'"}, 400)
@@ -1541,6 +1815,8 @@ class APIHandler(BaseHTTPRequestHandler):
                     entry["days"] = days
                 if value:
                     entry["value"] = value
+                if suction not in (None, ""):
+                    entry["suction"] = int(suction)
 
                 with scheduler_lock:
                     entries = list(scheduler_state["entries"])
@@ -1578,6 +1854,61 @@ class APIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 400)
             return
 
+        elif path == "/api/rxcmd":
+            # Send rx_data command (opcode 0x0402) with QLRPDataItem JSON wrapper
+            # Body: {"cmd": "MANCTRL_S", "data": "", "key": "2"}
+            try:
+                body = self._read_body()
+                cmd = body.get("cmd", "")
+                data_val = body.get("data", "")
+                key = body.get("key", "2")
+
+                if not cmd:
+                    self._send_json({"error": "missing 'cmd' field"}, 400)
+                    return
+
+                subid = DEVICE_STATE.get("device", {}).get("subid", "LUCXXXXXXXXXXXXX")
+                qlrp_obj = {
+                    "head": "rq", "key": key, "cmd": cmd,
+                    "sum": 0, "index": 0,
+                    "requestid": body.get("requestid") or f"ctrl{int(time.time())}",
+                    "data": data_val
+                }
+                # LZ4-compressed payloads (e.g. LUCY_MAP_MGR) carry their size
+                if body.get("lz4_source_size") is not None:
+                    qlrp_obj["lz4_source_size"] = int(body["lz4_source_size"])
+                qlrp = json.dumps(qlrp_obj)
+                rx_wrapper = json.dumps({
+                    "data": qlrp,
+                    "ts": int(time.time()),
+                    "subid": subid
+                })
+                # Count responses before sending
+                with device_responses_lock:
+                    resp_count_before = len(device_responses)
+
+                result = send_raw_opcode(0x04, 0x02, json.loads(rx_wrapper))
+                log_msg(f">>> SENT RXCMD: cmd={cmd} data={data_val} key={key}")
+
+                if result:
+                    # Wait for response — shorter for rapid-fire commands
+                    wait = float(body.get("wait", 0.8))
+                    if wait > 0:
+                        import time as _time
+                        _time.sleep(min(wait, 2.0))
+                    with device_responses_lock:
+                        new_resps = device_responses[resp_count_before:]
+                    self._send_json({
+                        "ok": True, "cmd": cmd,
+                        "responses": new_resps
+                    })
+                else:
+                    self._send_json({"ok": False, "error": "No active connection to Lucy"}, 503)
+
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+            return
+
         elif path == "/api/command":
             try:
                 body = self._read_body()
@@ -1602,13 +1933,15 @@ class APIHandler(BaseHTTPRequestHandler):
                 if command in blower_map:
                     command = blower_map[command]
 
-                # Build the DP 2 value string
+                # Build the DP value string
                 if value is not None:
                     dp_value = f"{command}:{value}"
                 else:
                     dp_value = command
 
-                result = send_downdps_command(2, dp_value)
+                # Allow specifying dp_id in the request (default: 2)
+                dp_id = body.get("dp_id", 2)
+                result = send_downdps_command(dp_id, dp_value)
                 if result:
                     self._send_json({"ok": True, "command": dp_value})
                 else:
@@ -1667,14 +2000,14 @@ def _parse_schedule(cfg):
         command = entry["command"]
         value = entry.get("value")
         parsed.append({"hour": hour, "minute": minute, "days": day_set,
-                        "command": command, "value": value})
+                        "command": command, "value": value, "suction": entry.get("suction")})
     return parsed
 
 
 def _find_next_run(schedule):
     """Find the next scheduled run time and command."""
     if not schedule:
-        return None, None
+        return None, None, None
     from datetime import timedelta
     now = datetime.now()
     best_dt = None
@@ -1697,8 +2030,8 @@ def _find_next_run(schedule):
         cmd = best_entry["command"]
         if best_entry.get("value"):
             cmd = f"{cmd}:{best_entry['value']}"
-        return best_dt, cmd
-    return None, None
+        return best_dt, cmd, best_entry.get("suction")
+    return None, None, None
 
 
 def _reload_schedule():
@@ -1731,7 +2064,7 @@ def run_scheduler():
         # Re-read schedule each cycle (picks up web UI changes)
         schedule = _reload_schedule()
         now = datetime.now()
-        next_dt, next_cmd = _find_next_run(schedule)
+        next_dt, next_cmd, next_suction = _find_next_run(schedule)
 
         with scheduler_lock:
             scheduler_state["next_run"] = next_dt.isoformat() if next_dt else None
@@ -1757,7 +2090,11 @@ def run_scheduler():
                     continue
 
         # Time to fire
-        log_msg(f"SCHEDULE: Firing scheduled command: {next_cmd}")
+        log_msg(f"SCHEDULE: Firing scheduled command: {next_cmd} (suction {next_suction})")
+        if next_suction is not None and next_cmd.split(":")[0] in ("start", "zones", "rooms"):
+            # suction for this run (the page's default is 88), set just before it starts
+            send_downdps_command(2, f"blowerMode:{int(next_suction)}")
+            time.sleep(2)
 
         # Parse command:value format
         if ":" in next_cmd:
@@ -1766,7 +2103,34 @@ def run_scheduler():
         else:
             dp_value = next_cmd
 
-        result = send_downdps_command(2, dp_value)
+        if next_cmd.split(":")[0] == "security":
+            # "security:on" / "security:off": her motion watch, via lucy_stream (security.py)
+            try:
+                req = urllib.request.Request("http://127.0.0.1:8090/api/security", headers={"Content-Type": "application/json"},
+                                             data=json.dumps({"on": next_cmd.endswith(":on")}).encode())
+                r = json.loads(urllib.request.urlopen(req, timeout=60).read())
+                result = r.get("on") == next_cmd.endswith(":on")
+                log_msg(f"SCHEDULE: {next_cmd} -> on={r.get('on')}")
+            except Exception as e:
+                log_msg(f"SCHEDULE: {next_cmd} failed: {e}")
+                result = False
+        elif next_cmd.split(":")[0] in ("zones", "rooms"):
+            # "zones:all", "zones:3,5", "rooms:1,2": a clean of just those, via the control page's
+            # server (lucy_stream.py map_run, which checks the ids against the map in use)
+            kind, _, val = next_cmd.partition(":")
+            body = {"map": 1, "type": 1 if kind == "zones" else 3, "check": True,
+                    "ids": "all" if val in ("", "all") else [int(i) for i in val.split(",") if i.strip().isdigit()]}
+            try:
+                req = urllib.request.Request("http://127.0.0.1:8090/api/maprun", data=json.dumps(body).encode(),
+                                             headers={"Content-Type": "application/json"})
+                r = json.loads(urllib.request.urlopen(req, timeout=60).read())
+                result = r.get("ok")
+                log_msg(f"SCHEDULE: {next_cmd} -> {r}")
+            except Exception as e:
+                log_msg(f"SCHEDULE: {next_cmd} failed: {e}")
+                result = False
+        else:
+            result = send_downdps_command(2, dp_value)
 
         with scheduler_lock:
             scheduler_state["last_run"] = datetime.now().isoformat()
@@ -1815,9 +2179,11 @@ if __name__ == "__main__":
         t_dispatch = threading.Thread(target=run_protocol_server, args=(dispatch_port,), daemon=True)
         t_dispatch.start()
 
-    # Also listen on port 80 for any plain HTTP
-    t80 = threading.Thread(target=lambda: run_protocol_server(80), daemon=True)
-    t80.start()
+    # Also listen on port 80 for any plain HTTP (optional — set http_port: null in config to skip)
+    http_port = CONFIG.get("http_port", 80)
+    if http_port:
+        t80 = threading.Thread(target=lambda: run_protocol_server(http_port), daemon=True)
+        t80.start()
 
     # REST API on port 8080
     api_port = CONFIG.get("api_port", 8080)
@@ -1826,7 +2192,7 @@ if __name__ == "__main__":
 
     log_msg("")
     log_msg("Servers running. To connect Lucy:")
-    log_msg(f"  Option 1 (router DNS): Point euiot.trifo.com + eudispatch.trifo.com → {LOCAL_IP}")
+    log_msg(f"  Option 1 (router DNS): Point euiot.trifo.com + eudispatch.trifo.com -> {LOCAL_IP}")
     log_msg(f"  Option 2 (on Lucy):    echo \"{LOCAL_IP} eudispatch.trifo.com\" >> /etc/hosts")
     log_msg(f"                         echo \"{LOCAL_IP} euiot.trifo.com\" >> /etc/hosts")
     log_msg(f"                         kill $(pidof cloud_node)")
@@ -1843,6 +2209,22 @@ if __name__ == "__main__":
     ctrl_thread.start()
 
     # Scheduler
+    def ask_status():
+        # her status reports only come on a change: ask for ALL_INFO_JSON (key 11) when the last
+        # news is over a minute old, so the control page's status chip is never blank (2026-10-26)
+        while True:
+            time.sleep(20)
+            with robot_status_lock:
+                last = robot_status.get("last_update")
+            try:
+                stale = not last or (datetime.now() - datetime.fromisoformat(last)).total_seconds() > 60
+                if stale:
+                    req = urllib.request.Request("http://127.0.0.1:8080/api/rxcmd", headers={"Content-Type": "application/json"},
+                                                 data=json.dumps({"cmd": "ALL_INFO_JSON", "data": "", "key": "11", "wait": 0}).encode())
+                    urllib.request.urlopen(req, timeout=10).read()
+            except Exception:
+                pass
+    threading.Thread(target=ask_status, daemon=True).start()
     sched_thread = threading.Thread(target=run_scheduler, daemon=True)
     sched_thread.start()
 

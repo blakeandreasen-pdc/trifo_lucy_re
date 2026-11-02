@@ -1,46 +1,56 @@
-# Lucy Local Control Server Configuration
-# =========================================
+# Lucy Local Control Server - Configuration
+# ==========================================
 #
-# Most values are auto-learned from Lucy's handshake and saved to state.yaml.
-# You only need to set server.ip (or leave as "auto" to auto-detect).
+# Most values are auto-learned from Lucy's handshake and saved to state.yaml
+# the first time she connects. You normally only need to set server.ip
+# (or leave it as "auto").
 
 server:
-  # IP address of this machine on the LAN. Lucy's DNS must resolve to this.
-  # Set to "auto" to auto-detect from the default network interface.
+  # IP address of THIS machine on the LAN. Lucy's DNS must resolve
+  # euiot.trifo.com and eudispatch.trifo.com to this address.
+  # "auto" picks the IP of the default network interface.
   ip: "auto"
 
-  # Ports (these match Trifo's protocol and generally shouldn't change)
+  # Ports used by Trifo's protocol. Don't change unless you know why.
   dispatch_port: 7990       # QLCloud dispatch (TLS)
   mqtt_port: 17766          # QLCloud MQTT broker (TLS)
-  https_port: 443           # HTTPS (voice packages, etc.)
-  control_port: 9999        # Local control socket (send_command.py / lucy_control.py)
-  api_port: 8080            # REST API + Web UI
+  https_port: 443           # HTTPS (voice package requests)
+  http_port: 80             # Plain HTTP catch-all. Set to null to disable
+                            # if port 80 is already used (IIS, Skype, etc.).
+  control_port: 9999        # Local control socket (lucy_control.py)
+  api_port: 8080            # REST API + Web UI (http://localhost:8080/)
 
-  # TLS certificate paths (relative to this config file's directory)
+  # TLS certificate paths (relative to this file's directory)
   cert_file: "mqtt_cert.pem"
   key_file: "mqtt_key.pem"
 
-# QLCloud protocol constants (don't change unless you know what you're doing)
+# QLCloud protocol constants - do NOT change.
 qlcloud:
-  seed: 0x7ecf              # Rolling XOR seed for dispatch protocol
-  magic_eu: 0xf1eb          # EU region dispatch magic
-  magic_us: 0xf1ec          # US region dispatch magic
+  seed: 0x7ecf
+  magic_eu: 0xf1eb
+  magic_us: 0xf1ec
 
-# Device credentials by region
-# These are Trifo product keys — same for all Lucy robots in a region.
+# Device credentials by region. These are Trifo product keys - same for
+# every Lucy in a region. The server auto-detects region from Lucy's
+# handshake, so you don't normally need to touch this.
 regions:
   eu:
     product_id: 1009506721
     product_key: "376c3878d6666a48c628226b6453d923"
   us:
-    product_id: null         # TODO: discover from US-region Lucy
+    product_id: null
     product_key: "a734264a61794bfc346463762762f429"
 
-# Scheduling — automatic cleaning runs
-# Each entry needs a time (24h format) and a command.
-# Optional: days (mon,tue,wed,thu,fri,sat,sun) — defaults to every day.
+# Scheduling - automatic cleaning runs.
+# Only fires when the server is running; no persistence beyond that.
+# Each entry needs a time (24h, HH:MM) and a command.
+# Optional: days = subset of [mon, tue, wed, thu, fri, sat, sun].
+#
+# You can also edit schedule.json directly, or add/remove entries from
+# the web UI at http://localhost:8080/ - those changes persist across
+# restarts.
 schedule:
-  # Example: clean at 9am on weekdays, dock at 10:30 as safety net
+  # Example (uncomment and edit):
   # - time: "09:00"
   #   command: start
   #   days: [mon, tue, wed, thu, fri]
@@ -48,7 +58,13 @@ schedule:
   #   command: dock
   #   days: [mon, tue, wed, thu, fri]
 
+# SSH access to a rooted Lucy - used for the live map and camera.
+# Optional: everything else works without it.
+lucy:
+  ip: "YOUR_LUCY_IP"
+  ssh_key: "~/.ssh/trifo_lucy"
+
 # Logging
 logging:
-  file: "capture_log.txt"    # Log file (relative to config directory)
-  verbose: true              # Log all MQTT traffic details
+  file: "capture_log.txt"
+  verbose: true

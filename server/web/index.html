@@ -12,7 +12,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
 .status-dot.connected { background: #4ecca3; }
 .status-dot.disconnected { background: #e23e57; }
-.container { max-width: 600px; margin: 0 auto; padding: 24px; }
+.container { max-width: 640px; margin: 0 auto; padding: 24px; }
 .card { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #0f3460; }
 .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #4ecca3; margin-bottom: 12px; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -24,6 +24,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .stat-value.docked { color: #3498db; }
 .stat-value.charging { color: #3498db; }
 .stat-value.returning { color: #f39c12; }
+.stat-value.idle { color: #888; }
+.stat-value.scanning { color: #e67e22; }
 .stat-value.error { color: #e23e57; }
 .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .btn { padding: 16px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
@@ -72,6 +74,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .cmd-ref td { padding: 4px 8px; border-bottom: 1px solid #0f3460; vertical-align: top; }
 .cmd-ref td:first-child { color: #4ecca3; font-family: monospace; white-space: nowrap; }
 .cmd-ref .cat { color: #f39c12; font-weight: 600; padding-top: 10px; font-size: 13px; }
+/* Map */
+.map-container { position: relative; background: #111; border-radius: 8px; overflow: hidden; }
+.map-container canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.map-meta { display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-top: 6px; }
+.map-controls { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.map-controls button { font-size: 12px; }
+.map-status { font-size: 12px; color: #666; margin-top: 4px; }
+.map-status.ok { color: #4ecca3; }
+.map-status.err { color: #e23e57; }
 .power-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
 .btn-power { background: #0f3460; color: #eee; padding: 10px 4px; font-size: 13px; font-weight: 600; border: 1px solid #1a3a6e; }
 .btn-power:hover:not(:disabled) { background: #1a4a7e; }
@@ -113,6 +124,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="stat-label">Power %</div>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Map</h2>
+    <div class="map-container">
+      <canvas id="map-canvas" width="400" height="400"></canvas>
+    </div>
+    <div class="map-meta">
+      <span id="map-dims">--</span>
+      <span id="map-cell-size">--</span>
+    </div>
+    <div class="map-controls">
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;" onclick="refreshMap()">Refresh</button>
+      <label style="font-size:12px;color:#888;">
+        <input type="checkbox" id="map-auto" checked onchange="toggleMapAuto()"> Auto (10s)
+      </label>
+    </div>
+    <div class="map-status" id="map-status">Loading map...</div>
+  </div>
+
+  <div class="card">
+    <h2>Camera</h2>
+    <div class="map-container">
+      <img id="cam-img" alt="Lucy camera" style="display:block;width:100%;height:auto;">
+    </div>
+    <div class="map-controls">
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;" onclick="refreshCamera()">Snapshot</button>
+      <label style="font-size:12px;color:#888;">
+        <input type="checkbox" id="cam-auto" onchange="toggleCamAuto()"> Auto (3s)
+      </label>
+    </div>
+    <div class="map-status" id="cam-status">Press Snapshot. The camera only runs while Lucy is active.</div>
   </div>
 
   <div class="card">
@@ -213,6 +256,175 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <tr><td>LOG_MAP</td><td>Map history log</td></tr>
         <tr><td>RESTART_CLEAN</td><td>Restart cleaning run</td></tr>
         <tr><td>SET_WALL_FOLLOW_ENABLE</td><td>Toggle wall follow</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Manual Control</h2>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;">MANCTRL via rx_data. Direction codes 1-12 (joystick positions). Commands run until next command. Start manual mode first!</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="btn btn-sm" style="background:#4ecca3;color:#1a1a2e;padding:10px 20px;font-size:14px;" onclick="manCtrl('S')">Start Manual</button>
+      <button class="btn btn-sm" style="background:#e23e57;color:#fff;padding:10px 20px;font-size:14px;" onclick="manCtrl('E')">End Manual</button>
+      <button class="btn btn-sm" style="background:#f39c12;color:#1a1a2e;padding:10px 16px;font-size:14px;" onclick="sendAngle(0)">Stop (0)</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;max-width:300px;margin:0 auto 8px;">
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(6)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(6)" ontouchend="stopDrive()">6 Fwd-L</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:16px;font-weight:700;" onmousedown="startDrive(4)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(4)" ontouchend="stopDrive()">4 Fwd</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(2)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(2)" ontouchend="stopDrive()">2 Fwd-R</button>
+
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(5)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(5)" ontouchend="stopDrive()">5 Slight-L</button>
+      <button class="btn btn-sm" style="background:#e23e57;color:#fff;padding:14px 8px;font-size:14px;font-weight:700;" onclick="sendAngle(0)">STOP</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(3)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(3)" ontouchend="stopDrive()">3 Slight-R</button>
+
+      <button class="btn btn-sm" style="background:#1a3a6e;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(7)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(7)" ontouchend="stopDrive()">7 Spin L</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:14px 8px;font-size:14px;" onmousedown="startDrive(8)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(8)" ontouchend="stopDrive()">8 Back</button>
+      <button class="btn btn-sm" style="background:#1a3a6e;color:#eee;padding:14px 8px;font-size:13px;" onmousedown="startDrive(1)" onmouseup="stopDrive()" onmouseleave="stopDrive()" ontouchstart="startDrive(1)" ontouchend="stopDrive()">1 Spin R</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;justify-content:center;">
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:6px 10px;font-size:11px;" onmousedown="startDrive(12)" onmouseup="stopDrive()" onmouseleave="stopDrive()">12</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:6px 10px;font-size:11px;" onmousedown="startDrive(11)" onmouseup="stopDrive()" onmouseleave="stopDrive()">11 Bk-L</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:6px 10px;font-size:11px;" onmousedown="startDrive(9)" onmouseup="stopDrive()" onmouseleave="stopDrive()">9 Bk+</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:6px 10px;font-size:11px;" onmousedown="startDrive(10)" onmouseup="stopDrive()" onmouseleave="stopDrive()">10 Bk++</button>
+    </div>
+    <div style="font-size:11px;color:#666;text-align:center;margin-bottom:8px;" id="drive-status">Hold to drive, release to send ANGLE:0 (stop). Press Start Manual first!</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:8px 14px;font-size:12px;" onclick="manCtrlData('MANBLOWER','LOW')">Blower Low</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:8px 14px;font-size:12px;" onclick="manCtrlData('MANBLOWER','MIDDLE')">Blower Mid</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:8px 14px;font-size:12px;" onclick="manCtrlData('MANBLOWER','HIGHT')">Blower High</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;padding:8px 14px;font-size:12px;" onclick="manCtrlData('MANBLOWER','CLOSE')">Blower Off</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Console (rx_data)</h2>
+    <p style="font-size:12px;color:#888;margin-bottom:8px;">Send any QLRPDataItem command. cmd is UPPERCASE for rx_data path.</p>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input type="text" id="rx-cmd" placeholder="cmd (e.g. MANCTRL)"
+             style="flex:1;background:#1a1a2e;border:1px solid #0f3460;color:#eee;padding:10px;border-radius:6px;font-size:14px;"
+             onkeydown="if(event.key==='Enter')sendRxCmd()">
+      <input type="text" id="rx-data" placeholder="data (e.g. S, E, ANGLE:0)"
+             style="flex:1;background:#1a1a2e;border:1px solid #0f3460;color:#eee;padding:10px;border-radius:6px;font-size:14px;"
+             onkeydown="if(event.key==='Enter')sendRxCmd()">
+      <button class="btn btn-sm" style="background:#e67e22;color:#fff;padding:10px 16px;" onclick="sendRxCmd()">Send</button>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:8px;align-items:center;">
+      <label style="font-size:12px;color:#888;"><input type="checkbox" id="rx-show-bg" style="accent-color:#4ecca3;"> Show background updates</label>
+      <button class="btn btn-sm" style="background:#333;color:#888;padding:4px 10px;font-size:11px;" onclick="document.getElementById('rx-output').textContent='';">Clear</button>
+    </div>
+    <div id="rx-output" style="background:#0d1117;border:1px solid #0f3460;border-radius:6px;padding:10px;font-family:monospace;font-size:13px;max-height:400px;overflow-y:auto;white-space:pre-wrap;color:#8b949e;min-height:60px;">Waiting for commands...</div>
+
+    <button class="collapse-toggle" onclick="toggleRef(this)" style="margin-top:10px;">
+      <span class="arrow">&#9654;</span> rx_data Command Reference (UPPERCASE)
+    </button>
+    <div class="collapse-body cmd-ref">
+      <p style="margin-bottom:8px;color:#aaa;">These go via opcode 0x0402 (app path). cmd is UPPERCASE. Separate from smart speaker commands.</p>
+      <div class="cat">Manual Control (cmd=MANCTRL)</div>
+      <table>
+        <tr><td>data="S"</td><td>Enter manual mode (confirmed! ~10s idle timeout)</td></tr>
+        <tr><td>data="E"</td><td>Exit manual mode</td></tr>
+        <tr><td>data="K"</td><td>Kill (function unknown — may not stop movement)</td></tr>
+        <tr><td>data="ANGLE:0"</td><td>Stop / joystick centre (try this to halt movement)</td></tr>
+        <tr><td>data="ANGLE:1"</td><td>Spin clockwise (right)</td></tr>
+        <tr><td>data="ANGLE:2"</td><td>Forward + right curve</td></tr>
+        <tr><td>data="ANGLE:3"</td><td>Forward + slight right</td></tr>
+        <tr><td>data="ANGLE:4"</td><td>Straight forward</td></tr>
+        <tr><td>data="ANGLE:5"</td><td>Forward + slight left</td></tr>
+        <tr><td>data="ANGLE:6"</td><td>Forward + left curve</td></tr>
+        <tr><td>data="ANGLE:7"</td><td>Spin anticlockwise (left)</td></tr>
+        <tr><td>data="ANGLE:8"</td><td>Backward</td></tr>
+        <tr><td>data="ANGLE:9-12"</td><td>Backward variants (speed/turn, TBD)</td></tr>
+      </table>
+      <div class="cat">Manual Blower (cmd=MANBLOWER)</div>
+      <table>
+        <tr><td>data="LOW"</td><td>Blower low</td></tr>
+        <tr><td>data="MIDDLE"</td><td>Blower medium</td></tr>
+        <tr><td>data="HIGHT"</td><td>Blower high (firmware typo)</td></tr>
+        <tr><td>data="CLOSE"</td><td>Blower off (confirmed working)</td></tr>
+      </table>
+      <div class="cat">Status &amp; Info</div>
+      <table>
+        <tr><td>GET_WORK_STATUS</td><td>Full status (returns ALL_INFO)</td></tr>
+        <tr><td>GET_SYSTEM_CONFIG</td><td>System configuration</td></tr>
+        <tr><td>GET_MOPPING_MODE</td><td>Mopping mode</td></tr>
+        <tr><td>GET_MONITOR_STATE</td><td>Camera/monitor state</td></tr>
+        <tr><td>GET_MONITOR_TASKS</td><td>Monitoring tasks</td></tr>
+        <tr><td>GET_MONITOR_DETAIL</td><td>Monitor detail</td></tr>
+        <tr><td>GET_LOG_STATE</td><td>Log state</td></tr>
+        <tr><td>BATTERY</td><td>Battery level</td></tr>
+        <tr><td>CLEAN_STATE</td><td>Cleaning state code</td></tr>
+        <tr><td>CLEAN_INFO</td><td>Clean info</td></tr>
+        <tr><td>CLEAN_AREA</td><td>Cleaned area</td></tr>
+        <tr><td>CLEAN_TIME</td><td>Clean time</td></tr>
+        <tr><td>SERIAL_NUM</td><td>Serial number</td></tr>
+        <tr><td>PRODUCT_NAME</td><td>Product name</td></tr>
+        <tr><td>FIRMWARE_VERSION</td><td>Firmware version</td></tr>
+        <tr><td>BIND_STATE</td><td>Bind state</td></tr>
+      </table>
+      <div class="cat">Cleaning Modes (Handle_Robot_Ctrl — any non-numeric cmd hits case 0)</div>
+      <table>
+        <tr><td colspan="2" style="color:#aaa;font-size:11px;">Non-numeric cmd strings (ZIGZAG, SPOT, etc) all map to case 0 via atoi()=0. Case 0 then checks the data field. Internally references "planning A2B", "planning spiral", "ANGLE:%d".</td></tr>
+        <tr><td style="color:#4ecca3;">cmd="ZIGZAG" data=""</td><td>Confirmed OK! Starts zigzag clean (no mapping)</td></tr>
+        <tr><td>cmd="SPOT" data=""</td><td>Try: spot clean? (case 0 has "planning spiral")</td></tr>
+        <tr><td>cmd="A2B" data="x,y"</td><td>Try: go-to-point? ("planning A2B, x:, y:")</td></tr>
+        <tr><td>cmd="RECHARGE" data=""</td><td>Try: return to dock?</td></tr>
+        <tr><td>cmd="RESTART_CLEAN" data=""</td><td>Restart cleaning (in rx_data cmd table)</td></tr>
+      </table>
+      <div class="cat">Settings</div>
+      <table>
+        <tr><td>SET_MONITOR_STATE</td><td>Enable/disable camera monitor</td></tr>
+        <tr><td>SET_MONITOR_PERSON_ONLY_STATE</td><td>Person-only monitoring</td></tr>
+        <tr><td>SET_MONITOR_RECORD</td><td>Monitor recording</td></tr>
+        <tr><td>SET_WALL_FOLLOW_ENABLE</td><td>Wall follow mode</td></tr>
+        <tr><td>SET_TIRVIS_ENABLE</td><td>TIRVIS obstacle avoidance</td></tr>
+        <tr><td>SET_RUNNING_MODE_WITH_DOCK</td><td>Running mode (dock)</td></tr>
+        <tr><td>SET_RUNNING_MODE_WITHOUT_DOCK</td><td>Running mode (no dock)</td></tr>
+        <tr><td>SET_USER_COUNTRY</td><td>User country</td></tr>
+        <tr><td>SET_MAP_MANAGE_STATE</td><td>Map management</td></tr>
+        <tr><td>SET_MOTION_DETECT_MODE</td><td>Motion detection mode</td></tr>
+        <tr><td>SET_LOG_STATE</td><td>Log state</td></tr>
+        <tr><td>SET_DEBUG_LOG</td><td>Debug logging</td></tr>
+        <tr><td>RESET_MTNC</td><td>Reset maintenance counters</td></tr>
+        <tr><td>RESET_DEVICE_DATA</td><td>Factory reset device data</td></tr>
+        <tr><td>BOT_REBOOT</td><td>Reboot robot</td></tr>
+      </table>
+      <div class="cat">Media/Streaming</div>
+      <table>
+        <tr><td>STREAM_CONTROL</td><td>Stream control</td></tr>
+        <tr><td>RTMP_PARAM</td><td>RTMP parameters</td></tr>
+        <tr><td>RTMP_THROB</td><td>RTMP heartbeat</td></tr>
+        <tr><td>RTSP_THROB</td><td>RTSP heartbeat</td></tr>
+        <tr><td>VOICETALK_PARAM</td><td>Voice talk parameters</td></tr>
+        <tr><td>START_TALK</td><td>Start two-way talk</td></tr>
+        <tr><td>STOP_TALK</td><td>Stop two-way talk</td></tr>
+      </table>
+      <div class="cat">Logs &amp; History</div>
+      <table>
+        <tr><td>LOG_CLEAN</td><td>Clean history</td></tr>
+        <tr><td>LOG_MAP</td><td>Map history</td></tr>
+        <tr><td>LOG_SUM</td><td>Log summary</td></tr>
+        <tr><td>LOG_QUERY</td><td>Log query</td></tr>
+        <tr><td>LOG_STATIS</td><td>Log statistics</td></tr>
+        <tr><td>TOTAL_TIME</td><td>Total run time</td></tr>
+        <tr><td>TOTAL_AREA</td><td>Total cleaned area</td></tr>
+        <tr><td>TOTAL_TIMES</td><td>Total clean count</td></tr>
+        <tr><td>TOTAL_MAINBRSH</td><td>Main brush hours</td></tr>
+        <tr><td>TOTAL_SIDEBRSH</td><td>Side brush hours</td></tr>
+        <tr><td>TOTAL_FILTER</td><td>Filter hours</td></tr>
+      </table>
+      <div class="cat">Other</div>
+      <table>
+        <tr><td>VOICE</td><td>Voice/language control</td></tr>
+        <tr><td>FIND_ME</td><td>Find me (via rx_data path)</td></tr>
+        <tr><td>MSG</td><td>Message</td></tr>
+        <tr><td>SPIRAL_STATUS</td><td>Spiral clean status</td></tr>
+        <tr><td>GET_MAP</td><td>Map data</td></tr>
+        <tr><td>GET_MONITOR_VIDEO</td><td>Monitor video</td></tr>
+        <tr><td>SET_UPLOAD_LOG_SLAM_MAP</td><td>Upload SLAM map</td></tr>
+      </table>
+      <div class="cat">Data field format</div>
+      <table>
+        <tr><td colspan="2" style="color:#aaa;">The <code>data</code> field is a string. For MANCTRL: <code>S</code>/<code>E</code>/<code>K</code> for mode, or <code>ANGLE:N</code> where N is a direction code (0-12). Commands run continuously until the next command. <code>ANGLE:0</code> = joystick centre = stop. Speed is <code>manual_wheel_speed: 8.0</code> from config. For MANBLOWER: <code>LOW</code>/<code>MIDDLE</code>/<code>HIGHT</code>/<code>CLOSE</code>.</td></tr>
       </table>
     </div>
   </div>
@@ -435,6 +647,139 @@ async function sendCustom() {
   }
 }
 
+// Manual control helpers
+let driveInterval = null;
+
+async function manCtrl(dataVal) {
+  const out = document.getElementById('rx-output');
+  const ts = new Date().toLocaleTimeString();
+  out.textContent += `[${ts}] >>> MANCTRL data="${dataVal}"\n`;
+  out.scrollTop = out.scrollHeight;
+  try {
+    const res = await fetch(API + '/api/rxcmd', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cmd: 'MANCTRL', data: dataVal})
+    });
+    const result = await res.json();
+    if (result.ok && result.responses) {
+      const real = result.responses.filter(r => !r.cmd.startsWith('ALL_INFO'));
+      for (const r of real) {
+        out.textContent += `[${ts}] <<< cmd="${r.cmd}" data="${r.data}" (${r.raw_size}B)\n`;
+      }
+    }
+    if (!result.ok) out.textContent += `[${ts}] !!! ${result.error}\n`;
+    out.scrollTop = out.scrollHeight;
+  } catch(e) {
+    out.textContent += `[${ts}] !!! ${e.message}\n`;
+  }
+}
+
+async function manCtrlData(cmd, dataVal) {
+  const out = document.getElementById('rx-output');
+  const ts = new Date().toLocaleTimeString();
+  out.textContent += `[${ts}] >>> ${cmd} data="${dataVal}"\n`;
+  out.scrollTop = out.scrollHeight;
+  try {
+    await fetch(API + '/api/rxcmd', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cmd: cmd, data: dataVal, wait: 0})
+    });
+  } catch(e) {}
+}
+
+function startDrive(dir) {
+  stopDrive();
+  document.getElementById('drive-status').textContent = `Driving ANGLE:${dir}...`;
+  document.getElementById('drive-status').style.color = '#4ecca3';
+  sendAngle(dir);
+  driveInterval = setInterval(() => sendAngle(dir), 200);
+}
+
+function stopDrive() {
+  if (driveInterval) {
+    clearInterval(driveInterval);
+    driveInterval = null;
+    document.getElementById('drive-status').textContent = 'Stopped (ANGLE:0 sent).';
+    document.getElementById('drive-status').style.color = '#666';
+    // Send ANGLE:0 = joystick center = stop
+    sendAngle(0);
+  }
+}
+
+async function sendAngle(dir) {
+  try {
+    await fetch(API + '/api/rxcmd', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cmd: 'MANCTRL', data: 'ANGLE:' + dir, wait: 0})
+    });
+  } catch(e) {}
+}
+
+async function sendRxCmd() {
+  const cmd = document.getElementById('rx-cmd').value.trim();
+  const data = document.getElementById('rx-data').value.trim();
+  if (!cmd) return;
+  const out = document.getElementById('rx-output');
+  const ts = new Date().toLocaleTimeString();
+  out.textContent += `\n[${ts}] >>> cmd="${cmd}" data="${data}"\n`;
+  out.scrollTop = out.scrollHeight;
+  try {
+    const res = await fetch(API + '/api/rxcmd', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cmd: cmd, data: data})
+    });
+    const result = await res.json();
+    if (result.ok && result.responses && result.responses.length > 0) {
+      const real = result.responses.filter(r => !r.cmd.startsWith('ALL_INFO'));
+      if (real.length > 0) {
+        for (const r of real) {
+          const dstr = typeof r.data === 'string' && r.data.length > 80 ? r.data.substring(0,80) + '...' : r.data;
+          const line = `[${ts}] <<< cmd="${r.cmd}" data="${dstr}" key="${r.key}" (${r.raw_size}B)`;
+          out.textContent += line + '\n';
+        }
+      } else {
+        out.textContent += `[${ts}] <<< (sent, only status updates in 0.8s - no direct reply)\n`;
+      }
+    } else if (result.ok) {
+      out.textContent += `[${ts}] <<< (sent, no reply within 0.8s)\n`;
+    } else {
+      out.textContent += `[${ts}] !!! ERROR: ${result.error}\n`;
+    }
+    out.scrollTop = out.scrollHeight;
+  } catch (e) {
+    out.textContent += `[${ts}] !!! ${e.message}\n`;
+    out.scrollTop = out.scrollHeight;
+  }
+}
+
+// Poll for unsolicited device responses
+let lastRespCount = 0;
+async function pollResponses() {
+  try {
+    const res = await fetch(API + '/api/responses?since=' + lastRespCount);
+    const data = await res.json();
+    if (data.responses && data.responses.length > 0) {
+      const out = document.getElementById('rx-output');
+      const showBg = document.getElementById('rx-show-bg').checked;
+      for (const r of data.responses) {
+        const isBg = r.cmd.startsWith('ALL_INFO');
+        if (isBg && !showBg) continue;
+        const ts = r.ts ? r.ts.split('T')[1].split('.')[0] : '??';
+        const style = isBg ? '(bg) ' : '';
+        const dstr = typeof r.data === 'string' && r.data.length > 80 ? r.data.substring(0,80) + '...' : r.data;
+        out.textContent += `[${ts}] ${style}<<< cmd="${r.cmd}" data="${dstr}" key="${r.key}" (${r.raw_size}B)\n`;
+        out.scrollTop = out.scrollHeight;
+      }
+    }
+    lastRespCount = data.total || 0;
+  } catch(e) {}
+}
+setInterval(pollResponses, 3000);
+
 async function toggleSchedule() {
   try {
     const res = await fetch(API + '/api/schedule/toggle', {method: 'POST'});
@@ -502,6 +847,179 @@ async function refreshSchedule() {
     const data = await res.json();
     updateScheduleUI(data);
   } catch (e) {}
+}
+
+// === MAP ===
+let mapAutoInterval = null;
+let mapData = null;
+
+function cellColor(val) {
+  // Color mapping for Lucy's grid cells
+  if (val === 0x80) return [40, 42, 54];        // unknown/unexplored → background
+  if (val === 0xFF) return [30, 30, 40];        // unexplored → very dark
+  if (val === 0x00) return [220, 225, 235];     // free space → white
+  if (val >= 0xB0) return [226, 62, 87];        // occupied/wall → red
+  if (val >= 0x90) return [243, 156, 18];       // semi-occupied → orange
+  if (val < 0x20) return [200, 210, 225];       // mostly free → light
+  if (val >= 0x70 && val < 0x80) return [120, 140, 160]; // scan confidence → blue-gray
+  if (val >= 0x40 && val < 0x70) return [160, 170, 185]; // moderate → lighter gray
+  return [80, 85, 100];                          // other → mid gray
+}
+
+function renderMap(data) {
+  const canvas = document.getElementById('map-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = data.width;
+  const h = data.height;
+
+  // Decode base64 grid cells
+  const raw = atob(data.cells_b64);
+  const cells = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) cells[i] = raw.charCodeAt(i);
+
+  // Set canvas to actual grid size
+  canvas.width = w;
+  canvas.height = h;
+
+  // Create image data
+  const img = ctx.createImageData(w, h);
+  const px = img.data;
+
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const idx = r * w + c;
+      const val = idx < cells.length ? cells[idx] : 0x80;
+      const [cr, cg, cb] = cellColor(val);
+      const p = (r * w + c) * 4;
+      px[p] = cr; px[p+1] = cg; px[p+2] = cb; px[p+3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // Draw robot position from pose data
+  if (data.pose && data.max_x && data.max_y && data.cell_size) {
+    const rx = data.pose.x;
+    const ry = data.pose.y;
+    const theta = data.pose.theta || 0;
+    // Convert world coords to grid coords. Rows follow world x and columns
+    // follow world y (both decreasing), so world +x points up the canvas and
+    // +y points left - verified against a live pose trail (158/158 poses on
+    // free cells; the unswapped mapping put her in walls).
+    const gc = Math.round((data.max_y - ry) / data.cell_size);
+    const gr = Math.round((data.max_x - rx) / data.cell_size);
+    if (gc >= 0 && gc < w && gr >= 0 && gr < h) {
+      const dotR = Math.max(4, Math.round(Math.min(w, h) / 50));
+      // Draw heading arrow
+      const arrowLen = dotR * 3;
+      const ax = gc - arrowLen * Math.sin(theta);
+      const ay = gr - arrowLen * Math.cos(theta);
+      ctx.beginPath();
+      ctx.moveTo(gc, gr);
+      ctx.lineTo(ax, ay);
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Draw robot dot
+      ctx.beginPath();
+      ctx.arc(gc, gr, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = '#3498db';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  // Update metadata
+  document.getElementById('map-dims').textContent = w + ' x ' + h + ' cells';
+  document.getElementById('map-cell-size').textContent = (data.cell_size * 100).toFixed(1) + ' cm/cell';
+}
+
+async function refreshMap() {
+  const statusEl = document.getElementById('map-status');
+  statusEl.textContent = 'Fetching...';
+  statusEl.className = 'map-status';
+  try {
+    const res = await fetch(API + '/api/map');
+    const data = await res.json();
+    if (data.ok) {
+      mapData = data;
+      renderMap(data);
+      const ago = data.timestamp ? Math.round((Date.now()/1000 - data.timestamp)) + 's ago' : '';
+      statusEl.textContent = 'Map loaded' + (ago ? ' (' + ago + ')' : '') + ' — ' + (data.source || '');
+      statusEl.className = 'map-status ok';
+    } else {
+      statusEl.textContent = data.error || 'Failed to load map';
+      statusEl.className = 'map-status err';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'map-status err';
+  }
+}
+
+function toggleMapAuto() {
+  if (document.getElementById('map-auto').checked) {
+    if (!mapAutoInterval) mapAutoInterval = setInterval(refreshMap, 10000);
+  } else {
+    if (mapAutoInterval) { clearInterval(mapAutoInterval); mapAutoInterval = null; }
+  }
+}
+
+// Initial map load + auto-refresh
+refreshMap();
+mapAutoInterval = setInterval(refreshMap, 10000);
+
+// --- Camera ---------------------------------------------------------------
+let camAutoInterval = null;
+let camBusy = false;
+let camUrl = null;
+
+async function refreshCamera() {
+  if (camBusy) return;
+  camBusy = true;
+  const statusEl = document.getElementById('cam-status');
+  try {
+    const res = await fetch(API + '/api/camera.png', {cache: 'no-store'});
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      statusEl.textContent = data.error || ('Camera error ' + res.status);
+      statusEl.className = 'map-status err';
+      return;
+    }
+    const age = parseFloat(res.headers.get('X-Frame-Age'));
+    const blob = await res.blob();
+    if (camUrl) URL.revokeObjectURL(camUrl);
+    camUrl = URL.createObjectURL(blob);
+    document.getElementById('cam-img').src = camUrl;
+    if (isNaN(age)) {
+      statusEl.textContent = 'Frame loaded';
+      statusEl.className = 'map-status ok';
+    } else if (age < 10) {
+      statusEl.textContent = 'Live (' + age.toFixed(1) + 's old)';
+      statusEl.className = 'map-status ok';
+    } else {
+      const mins = Math.round(age / 60);
+      statusEl.textContent = 'Last frame, ' + (mins >= 1 ? mins + ' min' : Math.round(age) + 's') +
+        ' old. Camera is off while Lucy is idle.';
+      statusEl.className = 'map-status';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'map-status err';
+  } finally {
+    camBusy = false;
+  }
+}
+
+function toggleCamAuto() {
+  if (document.getElementById('cam-auto').checked) {
+    refreshCamera();
+    if (!camAutoInterval) camAutoInterval = setInterval(refreshCamera, 3000);
+  } else {
+    if (camAutoInterval) { clearInterval(camAutoInterval); camAutoInterval = null; }
+  }
 }
 
 // SSE for real-time updates
