@@ -8,7 +8,7 @@
 Lucy completes the full handshake automatically via our capture server:
 
 1. **Dispatch** (port 7990): Lucy sends MAC, gets pointed to local MQTT broker
-2. **MQTT CONNECT** (port 17766): TLS 1.2, client_id=`c0:e7:bf:4a:97:d8`
+2. **MQTT CONNECT** (port 17766): TLS 1.2, client_id=`aa:bb:cc:dd:ee:ff`
 3. **Registration** (state 7→9): Lucy sends `product_sign`, we reply with `{"res":{"errcode":0},"data":{"dev_id":"SN","dev_key":"base64"}}`
 4. **Authentication** (state 10→14): Lucy sends `dev_sign`, we reply with `{"res":{"errcode":0},"data":{"iotid":"SN","token":"44chars","ts":unix_ts}}`
 5. **Online**: Lucy starts sending updps (status), file_upload requests, heartbeats
@@ -46,7 +46,7 @@ Read from cloud_node process memory at runtime (GOT[0xa48]):
 
 ### Sending Commands TO Lucy
 
-**MQTT Topic**: `d/s/12642239-4888536` (Lucy's subscribe topic)
+**MQTT Topic**: `d/s/00000000-0000000` (Lucy's subscribe topic)
 
 **16-byte QLCloud Header**:
 ```
@@ -64,7 +64,7 @@ Offset  Size  Value       Field
 ```json
 {
   "data": [{"i": 2, "v": "COMMAND_NAME"}],
-  "subid": "LUCPB4ACC26M0017",
+  "subid": "LUCXXXXXXXXXXXXX",
   "expire": <unix_timestamp + 300>
 }
 ```

@@ -1,7 +1,7 @@
 ---
 id: TASK-001
 title: Decode OGM grid data encoding
-status: in_progress
+status: parked
 priority: high
 depends_on: []
 estimated_effort: large
@@ -9,6 +9,8 @@ skills: [reverse-engineering, binary-analysis, aarch64, compression]
 ---
 
 # Decode OGM Grid Data Encoding
+
+> **Parked, November 2026:** maps now come from shared memory and the `.pbstream` files ([docs/maps.md](../../docs/maps.md)), so nothing depends on this task any more. It remains an open puzzle if you want it.
 
 ## Context
 

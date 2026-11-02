@@ -164,7 +164,7 @@ cd /data/user/app && ./run.sh &
 | Unknown | Impact | How to Resolve |
 |---------|--------|----------------|
 | AES serial key/IV | Cannot decode `/dev/ttyS3` traffic | Disassemble `TBot` constructor or runtime extract |
-| ~~QLCloud MQTT topic names~~ | ~~Cannot send commands~~ | **RESOLVED** — `d/s/12642239-4888536` (commands TO), `d/p/12642239-4888536` (data FROM) |
+| ~~QLCloud MQTT topic names~~ | ~~Cannot send commands~~ | **RESOLVED** — `d/s/00000000-0000000` (commands TO), `d/p/00000000-0000000` (data FROM) |
 | `CloudStatusDataItemMsg` proto fields | Cannot use IPC injection | Compile from reconstructed `.proto` or use `protoscope` |
 | ~~Rolling XOR for dispatch~~ | ~~Cannot decrypt~~ | **RESOLVED** — seed=0x7ecf, CRC-16/MODBUS |
 | Exact serial baud rate | Cannot monitor `/dev/ttyS3` | `strace` on `sensor_node` or hardware UART sniffer |

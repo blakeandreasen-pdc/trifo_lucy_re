@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+state.yaml
+*.pem
+capture_log.txt
+server/captures/
+server/security/
+server/map_backups/
+server/settings.json
+server/schedule.json
+server/runlog.json
+server/map_guard.json

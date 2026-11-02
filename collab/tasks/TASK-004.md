@@ -1,7 +1,7 @@
 ---
 id: TASK-004
 title: Disassemble cloud_node/slam_node to find OGM encoder
-status: open
+status: parked
 priority: high
 depends_on: []
 estimated_effort: medium
@@ -10,6 +10,8 @@ requires_robot: false
 ---
 
 # Disassemble cloud_node / slam_node to Find OGM Encoder
+
+> **Parked, November 2026:** maps now come from shared memory and the `.pbstream` files ([docs/maps.md](../../docs/maps.md)), so nothing depends on this task any more. It remains an open puzzle if you want it.
 
 ## Context
 

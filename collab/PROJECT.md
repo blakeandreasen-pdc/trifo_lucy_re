@@ -17,9 +17,16 @@ full command and status capability.
 - **Scheduling** — cron-style scheduling via config or web UI
 - **Status tracking** — real-time status, battery, position via SSE
 
+## Update, November 2026
+
+The camera and maps are now solved without decoding the `.ogm` file: see
+[docs/camera_audio.md](../docs/camera_audio.md) and [docs/maps.md](../docs/maps.md).
+The OGM tasks are parked because nothing depends on them now, though the
+puzzle is still there if it interests you. The section below is kept for that.
+
 ## What's UNSOLVED
 
-### The Big One: OGM Map Grid Decoding
+### Parked: OGM Map Grid Decoding
 
 The robot stores occupancy grid maps as `.ogm` files in a custom protobuf
 format. We can parse the protobuf envelope and extract metadata, but the
@@ -31,7 +38,6 @@ This is a 550-line self-contained writeup of everything known, tried, and
 ruled out. START HERE.
 
 ### Other Unknowns
-- Camera access (RTSP disabled, monitor commands untested)
 - OTA update package format
 - App-path action command format (UPPERCASE commands beyond status queries)
 
