@@ -8,20 +8,33 @@ local brain — no internet, no Trifo servers, no app required.
 
 ## What Works
 
-| Feature | Status |
-|---------|--------|
-| Local control server | Working — replaces Trifo cloud entirely |
-| Start / Stop / Pause / Dock | Working |
-| Find my robot (voice/beep) | Working |
-| Suction power (0-100%) | Working |
-| Volume control | Working |
-| Real-time status (battery, state) | Working |
-| Web UI | Working — dark theme, mobile-friendly |
-| Scheduling | Working — via web UI or config file |
-| WiFi setup without app | Working — via QR code |
-| Root SSH access | Working — see [rooting guide](Getting_root_on_lucy.md) |
-| Map decoding | **Unsolved** — [help wanted](collab/) |
-| Camera access | **Unsolved** — [help wanted](collab/) |
+**Latest update (November 2026):** the camera and live map are solved, and there's now a full phone-friendly control page. See the [changelog](CHANGELOG.md) for what changed and when, and [docs/](docs/README.md) for how it works.
+
+| Feature | Status | Needs root? |
+|---------|--------|-------------|
+| Local control server | Working: replaces Trifo cloud entirely | No |
+| Start / Stop / Pause / Dock | Working | No |
+| Find my robot (voice/beep) | Working | No |
+| Suction power (0-100%) | Working | No |
+| Volume control | Working | No |
+| Real-time status (battery, state) | Working | No |
+| Scheduling | Working | No |
+| WiFi setup without app | Working: via QR code | No |
+| Root SSH access | Working: see [rooting guide](Getting_root_on_lucy.md) | n/a |
+| Live camera (main and night vision) | Working | Yes |
+| Live map and robot position | Working | Yes |
+| Named map slots, previews, backups | Working | Yes |
+| Map protection against bad runs | Working | Yes |
+| Keep-out and clean zones, room cleaning | Working | Yes |
+| Smooth joystick driving, parking view | Working | Yes |
+| Microphone and speech through her speaker | Working | Yes |
+| Security mode (stills on motion) | Working | Yes |
+| Run log | Working | Yes |
+| Merging a new room into the map | **In progress**: file surgery works, placing a real room doesn't yet | Yes |
+| 3D scanning | **Experiment**: see [notes](docs/3d_scanner.md) | Yes |
+| Mopping | Settings accepted, but the tank looks passive: see [notes](docs/robot_notes.md#mopping) | n/a |
+
+The "Yes" column reflects how these are built here, over SSH. All of this has only been run on one robot, which is rooted, so unrooted use is less well tested.
 
 ## Quick Start
 
@@ -73,8 +86,9 @@ device debugging — but is not needed for day-to-day control.
 
 ## Server
 
-The server (`mqtt_capture/capture_server.py`) is a single Python file with
-no pip dependencies. It handles:
+The basic server (`server/capture_server.py`) is one Python file that needs
+only PyYAML. See [server/README.md](server/README.md) for the full setup,
+including the rooted extras. It handles:
 
 - **Dispatch protocol** (port 7990) — TLS handshake, device registration
 - **MQTT broker** (port 17766) — command/status protocol
@@ -140,7 +154,9 @@ documentation, and tips for getting the camera to read the code.
 
 ## Research & Reverse Engineering
 
-Full RE documentation in the [research docs](collab/docs/):
+How the newer features work is in the [technical notes](docs/README.md). The
+original RE documentation is in [docs/research/](docs/research/README.md) and
+[collab/docs/](collab/docs/):
 
 | Phase | Topic | Status |
 |-------|-------|--------|
@@ -152,21 +168,18 @@ Full RE documentation in the [research docs](collab/docs/):
 | 6 | Proof of concept | Complete |
 | 8 | Dispatch protocol | Complete |
 | 9 | MQTT commands | Complete — full local control |
-| 10 | Local control platform | In progress — server + web UI |
-| — | Map/OGM grid decoding | **Unsolved** — [help wanted](collab/) |
+| 10 | Local control platform | Complete: server and control page |
+| - | Camera | Complete: [notes](docs/camera_audio.md) |
+| - | Live and saved maps | Complete: [notes](docs/maps.md) |
+| - | `.ogm` upload file grid encoding | Parked: no longer needed for maps |
 
-## Contributing — Help Crack the Remaining Puzzles
+## Contributing
 
 The `collab/` directory is a self-contained research package designed so that
-anyone — human or AI — can pick up an open task and contribute. The main
-unsolved problems are **map decoding** (OGM grid data uses an unknown encoding)
-and **camera access**.
-
-**If you have Claude Code (or any AI coding agent):** you can point it at the
-`collab/` folder and it has everything it needs to start working. The tasks
-include sample data files, working parser scripts, ground truth reference
-images, and detailed research documentation. Just pick a task from
-`collab/tasks/` and go.
+anyone, human or AI, can pick up an open task and contribute. Its two big
+puzzles have changed: the camera is solved, and maps now come from shared memory
+and the `.pbstream` files, so decoding the `.ogm` file is parked. Check
+[collab/PROJECT.md](collab/PROJECT.md) for what's still open.
 
 See [collab/README.md](collab/README.md) for the full contribution framework,
 or grab the [reusable template](https://github.com/Gophercs/ai-collab) for
