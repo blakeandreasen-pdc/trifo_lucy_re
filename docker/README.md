@@ -31,7 +31,7 @@ Lucy reconnects within about 20 s of the server coming up.
 ## Pages
 
 - `http://<host>/` (or `:8110`): the full control page. Its Camera card plays the live stream and has a Snapshot button.
-- `http://<host>/live.html`: the live controller. It has the camera, a hold-to-drive D-pad (with arrows/WASD, Q/E to spin, Space to stop), start/pause/dock/find, and snapshots.
+- `http://<host>/live.html`: full-screen driving. The camera fills the screen with a thumb joystick over it, which snaps to the nearest of her 8 moves. You can also drive with WASD/arrows or a game controller's left stick. It has Stop/Dock/Find/Clean and snapshots, and goes in and out of manual mode on its own.
 - `http://<host>:8888/lucy`: plain HLS player.
 
 The camera only runs while someone is watching. `mediamtx/lucy-cam.sh` starts when a viewer opens path `lucy`. It sends the wake commands, then relays her `app-name/<id>` stream into `lucy`. MediaMTX stops it about 70 s after the last viewer leaves, and Lucy stops pushing about 15 s later.

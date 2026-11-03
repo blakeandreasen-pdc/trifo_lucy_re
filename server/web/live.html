@@ -2,116 +2,167 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Lucy Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lucy Drive</title>
 <style>
 :root {
-  --bg: #1a1a2e; --card: #16213e; --btn: #0f3460; --btn2: #1a3a6e;
-  --text: #eee; --muted: #888; --ok: #4ecca3; --bad: #e23e57; --warn: #f39c12;
+  --bg: #000; --glass: rgba(18, 20, 34, .62); --glass-strong: rgba(18, 20, 34, .85);
+  --line: rgba(255, 255, 255, .14); --text: #f1f2f6; --muted: #9aa0b4;
+  --ok: #4ecca3; --bad: #e23e57; --warn: #f39c12; --accent: #3d7bd9;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 720px; margin: 0 auto; padding: 10px 16px 24px; display: flex; flex-direction: column; gap: 10px; }
-header { display: flex; align-items: center; gap: 10px; }
-header h1 { font-size: 17px; margin: 0; flex: 1; }
-header a { color: var(--muted); font-size: 12px; text-decoration: none; }
-.pill { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--card); color: var(--muted); white-space: nowrap; }
-.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); }
-.card { background: var(--card); border-radius: 12px; padding: 10px; }
-.video { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; }
-.video video { width: 100%; height: 100%; object-fit: contain; display: none; }
-.video .idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #666; font-size: 13px; text-align: center; padding: 12px; }
-.video .badge { position: absolute; left: 8px; top: 8px; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.6); }
-.video .badge.live { color: var(--ok); } .video .badge.moving { left: auto; right: 8px; color: var(--warn); display: none; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.row .grow { flex: 1; }
-button { font: inherit; color: var(--text); background: var(--btn); border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-button:active, button.held { filter: brightness(1.35); }
-button.on { background: var(--ok); color: #1a1a2e; font-weight: 700; }
-button.danger { background: var(--bad); color: #fff; font-weight: 700; }
-button:disabled { opacity: .45; }
-.status { font-size: 12px; color: var(--muted); min-height: 1.4em; }
-.status.ok { color: var(--ok); } .status.err { color: var(--bad); }
-.pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 330px; margin: 0 auto; }
-.pad button { padding: 0; aspect-ratio: 1.35; font-size: 22px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
-.pad button small { font-size: 10px; font-weight: 400; color: #9ab; }
-.pad .spin { background: var(--btn2); }
-.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.actions button { padding: 12px 4px; font-size: 13px; }
-#snapwrap { display: none; }
-#snapwrap img { width: 100%; border-radius: 10px; display: block; }
-#snapwrap .row { margin-top: 6px; font-size: 12px; }
-#snapwrap a { color: var(--ok); }
-.hint { font-size: 11px; color: #667; text-align: center; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+
+/* video fills the screen */
+#stage { position: fixed; inset: 0; background: #000; }
+#video { width: 100%; height: 100%; object-fit: contain; display: block; }
+#idle { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 24px; }
+#idle .big { font-size: 15px; color: var(--text); }
+#flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .35s; }
+
+/* glass chips and buttons */
+.glass { background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); }
+button { font: inherit; color: var(--text); border-radius: 12px; cursor: pointer; touch-action: manipulation; }
+button:active { transform: scale(.96); }
+
+/* top bar */
+#top { position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right));
+  display: flex; gap: 8px; align-items: center; pointer-events: none; }
+#top > * { pointer-events: auto; }
+.chip { padding: 6px 10px; border-radius: 99px; font-size: 12px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+#top .grow { flex: 1; }
+.icon-btn { padding: 7px 11px; font-size: 13px; }
+.icon-btn.on { background: rgba(78, 204, 163, .28); border-color: var(--ok); }
+#top a { color: var(--text); text-decoration: none; }
+
+/* current command readout */
+#readout { position: fixed; left: 50%; top: calc(max(10px, env(safe-area-inset-top)) + 46px); transform: translateX(-50%);
+  padding: 6px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .15s; pointer-events: none; }
+#readout.show { opacity: 1; }
+
+/* joystick */
+#stick { position: fixed; left: max(22px, env(safe-area-inset-left)); bottom: max(22px, env(safe-area-inset-bottom));
+  width: 176px; height: 176px; border-radius: 50%; touch-action: none; }
+#stick .ring { position: absolute; inset: 0; border-radius: 50%; }
+#stick svg { position: absolute; inset: 0; pointer-events: none; }
+#knob { position: absolute; width: 72px; height: 72px; left: 52px; top: 52px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #c9cfdf 55%, #8e95ab); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  transition: left .12s, top .12s; pointer-events: none; }
+#stick.active #knob { transition: none; }
+#stick .label { position: absolute; left: 0; right: 0; bottom: -20px; text-align: center; font-size: 11px; color: var(--muted); }
+
+/* right-hand actions */
+#actions { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom));
+  display: grid; grid-template-columns: repeat(2, 76px); gap: 10px; }
+#actions button { height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; }
+#actions button .i { font-size: 20px; line-height: 1; }
+#stop { grid-column: span 2; height: 72px !important; background: rgba(226, 62, 87, .85); border-color: rgba(255,255,255,.25); font-weight: 700; font-size: 14px !important; }
+
+/* toast with snapshot */
+#toast { position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translate(-50%, 140%);
+  transition: transform .25s, visibility .25s; visibility: hidden; padding: 8px; border-radius: 14px; display: flex; gap: 10px; align-items: center; max-width: min(92vw, 360px); }
+#toast.show { transform: translate(-50%, 0); visibility: visible; }
+#toast img { width: 72px; border-radius: 8px; display: none; }
+#toast .msg { font-size: 12px; }
+#toast a { color: var(--ok); font-weight: 600; }
+
+/* help */
+#help { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); padding: 20px; }
+#help.show { display: flex; }
+#help .box { max-width: 380px; border-radius: 16px; padding: 18px 20px; background: var(--glass-strong); }
+#help h2 { margin: 0 0 10px; font-size: 16px; }
+#help p, #help li { font-size: 13px; color: #cfd3e1; margin: 6px 0; }
+#help ul { padding-left: 18px; margin: 6px 0; }
+#help kbd { background: rgba(255,255,255,.12); border-radius: 4px; padding: 0 5px; font: 12px ui-monospace, monospace; }
+
+/* phones in portrait: video at the top, controls in the dark space below it */
+@media (max-aspect-ratio: 4/5) {
+  #stage { bottom: auto; height: 75vw; top: calc(env(safe-area-inset-top) + 54px); }
+  #stick { width: 168px; height: 168px; }
+  #knob { left: 48px; top: 48px; }
+}
+@media (max-width: 480px) {
+  #top { gap: 6px; }
+  .chip { padding: 5px 8px; }
+  #mode-txt { display: none; }
+  .icon-btn { padding: 6px 9px; }
+  #fs-btn { display: none !important; }
+}
+@media (max-width: 380px) {
+  #actions { grid-template-columns: repeat(2, 66px); gap: 8px; }
+  #stick { width: 150px; height: 150px; } #knob { width: 64px; height: 64px; left: 43px; top: 43px; }
+}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>Lucy Live</h1>
-    <span class="pill" id="conn">…</span>
-    <span class="pill" id="batt">🔋 --</span>
-    <a href="/">Full controls ›</a>
-  </header>
+<div id="stage">
+  <video id="video" muted playsinline autoplay></video>
+  <div id="idle"><div class="big" id="idle-big">Waking the camera…</div><div id="idle-sub">About 5 seconds</div></div>
+  <div id="flash"></div>
+</div>
 
-  <section class="card">
-    <div class="video">
-      <video id="cam-video" muted playsinline autoplay></video>
-      <div class="idle" id="cam-idle">Camera off</div>
-      <span class="badge" id="state-badge">--</span>
-      <span class="badge moving" id="moving-badge">moving</span>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button id="live-btn">Start camera</button>
-      <button id="snap-btn">Snapshot</button>
-      <span class="grow"></span>
-      <button id="manual-btn" title="Manual mode is needed to drive. It is kept alive while this is on.">Manual mode</button>
-    </div>
-    <div class="status" id="cam-status">The camera takes about 5 s to wake. It switches off about a minute after you stop.</div>
-    <div id="snapwrap">
-      <img id="snap-img" alt="Lucy snapshot">
-      <div class="row"><span id="snap-info" class="grow"></span><a id="snap-save" download>Save</a></div>
-    </div>
-  </section>
+<div id="top">
+  <span class="chip glass"><span class="dot" id="conn-dot"></span><span id="conn">…</span></span>
+  <span class="chip glass" id="batt">🔋 --</span>
+  <span class="chip glass" id="mode"><span class="dot" id="mode-dot"></span><span id="mode-txt">Auto</span></span>
+  <span class="grow"></span>
+  <button class="icon-btn glass" id="cam-btn" title="Camera on/off">📷</button>
+  <button class="icon-btn glass" id="snap-btn" title="Snapshot (P)">◉</button>
+  <button class="icon-btn glass" id="fs-btn" title="Full screen (F)">⛶</button>
+  <button class="icon-btn glass" id="help-btn" title="Help (?)">?</button>
+  <a class="icon-btn glass" href="/" title="Full controls" style="border-radius:12px">☰</a>
+</div>
 
-  <section class="card">
-    <div class="pad">
-      <button data-a="6">↖<small>curve L</small></button>
-      <button data-a="4">↑<small>forward</small></button>
-      <button data-a="2">↗<small>curve R</small></button>
-      <button data-a="5">⬉<small>slight L</small></button>
-      <button class="danger" id="stop-btn">■<small style="color:#fdd">stop</small></button>
-      <button data-a="3">⬈<small>slight R</small></button>
-      <button data-a="7" class="spin">⟲<small>spin L</small></button>
-      <button data-a="8">↓<small>back</small></button>
-      <button data-a="1" class="spin">⟳<small>spin R</small></button>
-    </div>
-    <div class="status" id="drive-status" style="text-align:center;margin-top:8px">Hold a direction to drive, let go to stop.</div>
-    <div class="hint">Keys: arrows / WASD, Q/E spin, Space stop</div>
-  </section>
+<div id="readout" class="glass"></div>
 
-  <section class="card">
-    <div class="actions">
-      <button data-cmd="start">▶ Clean</button>
-      <button data-cmd="pause">⏸ Pause</button>
-      <button data-cmd="dock">⌂ Dock</button>
-      <button data-cmd="locate">🔔 Find</button>
-    </div>
-    <div class="status" id="act-status"></div>
-  </section>
-</main>
+<div id="stick" aria-label="Drive joystick">
+  <div class="ring glass"></div>
+  <svg viewBox="0 0 176 176" aria-hidden="true">
+    <g fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M80 22 L88 13 L96 22"/><path d="M80 154 L88 163 L96 154"/>
+      <path d="M22 80 L13 88 L22 96"/><path d="M154 80 L163 88 L154 96"/>
+    </g>
+  </svg>
+  <div id="knob"></div>
+  <div class="label">drag to drive</div>
+</div>
+
+<div id="actions">
+  <button class="glass" id="act-start" data-cmd="start"><span class="i">▶</span>Clean</button>
+  <button class="glass" id="act-pause" data-cmd="pause"><span class="i">⏸</span>Pause</button>
+  <button class="glass" id="act-dock" data-cmd="dock"><span class="i">⌂</span>Dock</button>
+  <button class="glass" id="act-find" data-cmd="locate"><span class="i">🔔</span>Find</button>
+  <button class="glass" id="stop">■ STOP</button>
+</div>
+
+<div id="toast" class="glass"><img id="toast-img" alt=""><div class="msg" id="toast-msg"></div></div>
+
+<div id="help"><div class="box">
+  <h2>Driving Lucy</h2>
+  <p>Drag the stick the way you want her to go. Let go to stop. She switches to manual mode on her own the first time you move, and back again after 2 minutes without driving.</p>
+  <ul>
+    <li>Up: forward. Slightly off up: gentle turn, further off: sharper turn.</li>
+    <li>Straight left/right: spin on the spot. Down: reverse.</li>
+    <li>Keys: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows. <kbd>W</kbd>+<kbd>A</kbd> curves, <kbd>A</kbd> alone spins. Hold <kbd>Shift</kbd> for gentler turns. <kbd>Space</kbd> stop, <kbd>P</kbd> snapshot, <kbd>F</kbd> full screen.</li>
+    <li>Game controller: left stick drives, <b>B</b> stops, <b>Y</b> snapshot.</li>
+  </ul>
+  <p>She has 8 fixed moves without root, so the stick snaps to the nearest one. The label at the top shows which.</p>
+  <p style="text-align:right;margin-top:12px"><button class="icon-btn glass" onclick="document.getElementById('help').classList.remove('show')">Got it</button></p>
+</div></div>
 
 <script>
 'use strict';
 const API = location.origin;
 const $ = (id) => document.getElementById(id);
 
-function setStatus(id, msg, cls) {
-  const el = $(id);
-  el.textContent = msg;
-  el.className = 'status' + (cls ? ' ' + cls : '');
-}
-
+// ---------------------------------------------------------------- server calls
 async function rx(cmd, data, key) {
   const res = await fetch(API + '/api/rxcmd', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -121,68 +172,89 @@ async function rx(cmd, data, key) {
   if (!j.ok) throw new Error(j.error || ('HTTP ' + res.status));
   return j;
 }
-
-async function command(command) {
+async function command(name) {
   const res = await fetch(API + '/api/command', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({command}),
+    body: JSON.stringify({command: name}),
   });
   const j = await res.json().catch(() => ({}));
   if (!j.ok) throw new Error(j.error || ('HTTP ' + res.status));
   return j;
 }
 
-// ---- status ---------------------------------------------------------------
+let toastTimer = null;
+function toast(msg, imgUrl, saveName) {
+  $('toast-msg').innerHTML = '';
+  $('toast-msg').append(msg);
+  const img = $('toast-img');
+  img.style.display = imgUrl ? 'block' : 'none';
+  if (imgUrl) {
+    img.src = imgUrl;
+    const a = document.createElement('a');
+    a.href = imgUrl; a.download = saveName; a.textContent = ' Save';
+    $('toast-msg').append(document.createElement('br'), a);
+  }
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('toast').classList.remove('show'), imgUrl ? 6000 : 2500);
+}
+
+// ---------------------------------------------------------------- status
 async function pollStatus() {
   try {
     const s = await (await fetch(API + '/api/status', {cache: 'no-store'})).json();
-    const conn = $('conn');
-    conn.textContent = s.connected ? 'online' : 'offline';
-    conn.className = 'pill ' + (s.connected ? 'ok' : 'bad');
+    $('conn').textContent = s.connected ? (s.status_name || 'online') : 'offline';
+    $('conn-dot').className = 'dot ' + (s.connected ? 'ok' : 'bad');
     $('batt').textContent = '🔋 ' + (s.battery != null ? s.battery + '%' : '--');
-    $('state-badge').textContent = s.status_name || '--';
   } catch (e) {
     $('conn').textContent = 'server down';
-    $('conn').className = 'pill bad';
+    $('conn-dot').className = 'dot bad';
   }
 }
 pollStatus();
 setInterval(pollStatus, 3000);
 
-// ---- camera (MediaMTX WebRTC; reading path "lucy" wakes her stream) ---------
-// Camera endpoint: same origin (/lucy/whep, when a reverse proxy routes it to MediaMTX),
-// else MediaMTX directly on :8889. Both servers answer OPTIONS with 204, but only MediaMTX
-// allows PATCH (WHEP trickle ICE), and nginx passes that header through.
+// ---------------------------------------------------------------- camera
+// Same-origin /lucy/whep when a reverse proxy routes it to MediaMTX, else :8889.
+// Both servers answer OPTIONS with 204, but only MediaMTX allows PATCH.
 const WHEP_SAME_ORIGIN = location.origin + '/lucy/whep';
 const WHEP_DIRECT = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
-let WHEP_URL = WHEP_DIRECT;
-let whepProbe = null;
+let WHEP_URL = WHEP_DIRECT, whepProbe = null;
 function whepUrl() {
   if (!whepProbe) {
     whepProbe = fetch(WHEP_SAME_ORIGIN, {method: 'OPTIONS'})
       .then((r) => { if (r.ok && /PATCH/.test(r.headers.get('Access-Control-Allow-Methods') || '')) WHEP_URL = WHEP_SAME_ORIGIN; })
-      .catch(() => {})
-      .then(() => WHEP_URL);
+      .catch(() => {}).then(() => WHEP_URL);
   }
   return whepProbe;
 }
-let camPc = null, camSession = null, camStarting = null, snapUrl = null;
+
+let camPc = null, camSession = null, camStarting = null, camWanted = true, camRetry = null;
+
+function idle(big, sub) {
+  $('idle').style.display = 'flex';
+  $('idle-big').textContent = big;
+  $('idle-sub').textContent = sub || '';
+  $('video').style.display = 'none';
+}
 
 function startCam() {
   if (camStarting) return camStarting;
   if (camPc) return Promise.resolve();
+  clearTimeout(camRetry);
+  $('cam-btn').classList.add('on');
+  idle('Waking the camera…', 'About 5 seconds');
   camStarting = (async () => {
-    setStatus('cam-status', 'Waking camera...');
-    $('live-btn').textContent = 'Stop camera';
-    const video = $('cam-video');
+    const video = $('video');
     const pc = new RTCPeerConnection();
     camPc = pc;
     pc.addTransceiver('video', {direction: 'recvonly'});
     pc.ontrack = (ev) => { video.srcObject = ev.streams[0] || new MediaStream([ev.track]); };
     pc.onconnectionstatechange = () => {
-      if (pc === camPc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) {
-        stopCam(true);
-        setStatus('cam-status', 'Camera stream dropped. Press Start camera to retry.', 'err');
+      if (pc !== camPc) return;
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        stopCam();
+        if (camWanted) { idle('Camera dropped', 'Reconnecting…'); camRetry = setTimeout(() => startCam().catch(() => {}), 2000); }
       }
     };
     await pc.setLocalDescription(await pc.createOffer());
@@ -203,176 +275,298 @@ function startCam() {
       video.addEventListener('loadeddata', () => { clearTimeout(t); resolve(); }, {once: true});
     });
     video.style.display = 'block';
-    $('cam-idle').style.display = 'none';
-    $('state-badge').classList.add('live');
-    setStatus('cam-status', 'Live', 'ok');
+    $('idle').style.display = 'none';
   })().catch((e) => {
-    stopCam(true);
-    setStatus('cam-status', 'Camera error: ' + e.message, 'err');
+    stopCam();
+    idle('Camera unavailable', e.message + '. Tap 📷 to retry.');
     throw e;
   }).finally(() => { camStarting = null; });
   return camStarting;
 }
 
-function stopCam(keepStatus) {
+function stopCam() {
   if (camPc) { camPc.close(); camPc = null; }
   if (camSession) {
-    fetch(new URL(camSession, WHEP_URL), {method: 'DELETE', keepalive: true}).catch(() => {});
+    try { fetch(new URL(camSession, WHEP_URL), {method: 'DELETE', keepalive: true}).catch(() => {}); } catch (e) {}
     camSession = null;
   }
-  const video = $('cam-video');
-  video.srcObject = null;
-  video.style.display = 'none';
-  $('cam-idle').style.display = 'flex';
-  $('state-badge').classList.remove('live');
-  $('live-btn').textContent = 'Start camera';
-  if (!keepStatus) setStatus('cam-status', 'Camera off');
+  $('video').srcObject = null;
+  $('cam-btn').classList.remove('on');
 }
 
-$('live-btn').onclick = () => { if (camPc || camStarting) stopCam(); else startCam().catch(() => {}); };
-
-$('snap-btn').onclick = async () => {
-  const wasLive = !!camPc && !camStarting;
-  try {
-    await startCam();
-    if (!wasLive) await new Promise((r) => setTimeout(r, 1500));
-    const video = $('cam-video');
-    const c = document.createElement('canvas');
-    c.width = video.videoWidth; c.height = video.videoHeight;
-    c.getContext('2d').drawImage(video, 0, 0);
-    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-    if (snapUrl) URL.revokeObjectURL(snapUrl);
-    snapUrl = URL.createObjectURL(blob);
-    $('snap-img').src = snapUrl;
-    const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
-    $('snap-save').href = snapUrl;
-    $('snap-save').download = 'lucy-' + ts + '.png';
-    $('snap-info').textContent = c.width + 'x' + c.height + ' at ' + new Date().toLocaleTimeString();
-    $('snapwrap').style.display = 'block';
-  } catch (e) {
-    setStatus('cam-status', 'Snapshot failed: ' + e.message, 'err');
-  } finally {
-    if (!wasLive) stopCam(true);
-  }
+$('cam-btn').onclick = () => {
+  if (camPc || camStarting) { camWanted = false; stopCam(); idle('Camera off', 'Tap 📷 to turn it on'); }
+  else { camWanted = true; startCam().catch(() => {}); }
 };
 
-// ---- manual mode: MANCTRL S, then K every 3 s or she drops out (~14 s) -------
-let manual = false, keepTimer = null, manualReady = null;
+async function snapshot() {
+  const video = $('video');
+  if (!camPc || !video.videoWidth) { toast('Camera is not running'); return; }
+  const c = document.createElement('canvas');
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext('2d').drawImage(video, 0, 0);
+  const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+  const url = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const flash = $('flash');
+  flash.style.transition = 'none'; flash.style.opacity = '.6';
+  requestAnimationFrame(() => { flash.style.transition = 'opacity .35s'; flash.style.opacity = '0'; });
+  toast('Snapshot ' + c.width + '×' + c.height, url, 'lucy-' + ts + '.png');
+}
+$('snap-btn').onclick = snapshot;
 
-function setManual(on) {
-  if (on === manual) return manualReady || Promise.resolve();
-  manual = on;
-  $('manual-btn').classList.toggle('on', on);
+// ---------------------------------------------------------------- manual mode
+// MANCTRL S to enter, K every 3 s to stay in (she drops out after ~14 s), E to leave.
+const MANUAL_IDLE_MS = 120000;
+let manual = false, manualReady = null, keepTimer = null, lastDriveAt = 0;
+
+function showMode() {
+  $('mode-txt').textContent = manualReady ? 'Entering manual…' : manual ? 'Manual' : 'Auto';
+  $('mode-dot').className = 'dot ' + (manualReady ? 'warn' : manual ? 'ok' : '');
+}
+
+function enterManual() {
+  if (manual) return manualReady || Promise.resolve();
+  manual = true;
+  keepTimer = setInterval(() => {
+    if (Date.now() - lastDriveAt > MANUAL_IDLE_MS && !driving()) { leaveManual(); return; }
+    rx('MANCTRL', 'K').catch(() => {});
+  }, 3000);
+  manualReady = rx('MANCTRL', 'S')
+    .then(() => new Promise((r) => setTimeout(r, 1500)))   // she needs a moment before ANGLE commands
+    .catch((e) => { toast('Manual mode failed: ' + e.message); leaveManual(); throw e; })
+    .finally(() => { manualReady = null; showMode(); });
+  showMode();
+  return manualReady;
+}
+
+function leaveManual() {
+  if (!manual) return;
+  manual = false;
   clearInterval(keepTimer); keepTimer = null;
-  if (on) {
-    setStatus('drive-status', 'Entering manual mode...');
-    keepTimer = setInterval(() => rx('MANCTRL', 'K').catch(() => {}), 3000);
-    if (!camPc && !camStarting) startCam().catch(() => {});
-    // she needs a moment after S before ANGLE commands are taken
-    manualReady = rx('MANCTRL', 'S')
-      .then(() => new Promise((r) => setTimeout(r, 1500)))
-      .then(() => setStatus('drive-status', 'Manual mode on. Tap or hold a direction.', 'ok'))
-      .catch((e) => { setStatus('drive-status', 'Manual mode failed: ' + e.message, 'err'); setManual(false); throw e; })
-      .finally(() => { manualReady = null; });
-    return manualReady;
-  }
-  stopHold();
   rx('MANCTRL', 'E').catch(() => {});
-  setStatus('drive-status', 'Manual mode off.');
-  return Promise.resolve();
+  showMode();
 }
-$('manual-btn').onclick = () => setManual(!manual).catch(() => {});
+showMode();
 
-// ---- driving, PTZ style: while a direction is held, resend ANGLE:N every 200 ms;
-// on release send ANGLE:0 (joystick centre = stop), twice in case one is late. ---
+// ---------------------------------------------------------------- driving
+// Without root she has 8 fixed moves (MANCTRL ANGLE:N). While a direction is held,
+// resend it every 200 ms; on release send ANGLE:0 twice in case one is late.
+const MOVES = {
+  0: {name: '', arrow: ''},
+  4: {name: 'Forward', arrow: '↑'},
+  5: {name: 'Gentle left', arrow: '↖'}, 3: {name: 'Gentle right', arrow: '↗'},
+  6: {name: 'Turn left', arrow: '↰'}, 2: {name: 'Turn right', arrow: '↱'},
+  7: {name: 'Spin left', arrow: '⟲'}, 1: {name: 'Spin right', arrow: '⟳'},
+  8: {name: 'Reverse', arrow: '↓'},
+};
 const REPEAT_MS = 200;
-const NAMES = {1: 'spin right', 2: 'curve right', 3: 'slight right', 4: 'forward', 5: 'slight left', 6: 'curve left', 7: 'spin left', 8: 'back'};
-let holdAngle = null, holdTimer = null;
 
-const angle = (n) => rx('MANCTRL', 'ANGLE:' + n);
-
-async function startHold(a, btn) {
-  stopHold(true);
-  holdAngle = a;
-  if (btn) btn.classList.add('held');
-  try {
-    if (!manual) await setManual(true);
-    else if (manualReady) await manualReady;
-  } catch (e) { stopHold(true); return; }
-  if (holdAngle !== a) return;                // released while entering manual mode
-  $('moving-badge').style.display = 'block';
-  setStatus('drive-status', 'Driving: ' + NAMES[a], 'ok');
-  const send = () => angle(a).catch((e) => setStatus('drive-status', 'Send failed: ' + e.message, 'err'));
-  send();
-  holdTimer = setInterval(send, REPEAT_MS);
+// x right, y up, both -1..1. Angle 0 = straight up.
+function moveFromVector(x, y, gentle) {
+  const r = Math.hypot(x, y);
+  if (r < 0.3) return 0;
+  const deg = Math.atan2(x, y) * 180 / Math.PI;
+  const a = Math.abs(deg), right = deg > 0;
+  if (a <= 15) return 4;
+  if (a <= 40 || (gentle && a <= 65)) return right ? 3 : 5;
+  if (a <= 65) return right ? 2 : 6;
+  if (a <= 125) return right ? 1 : 7;
+  return 8;
 }
 
-function stopHold(quiet) {
-  const wasDriving = holdTimer !== null;
-  holdAngle = null;
-  clearInterval(holdTimer); holdTimer = null;
-  document.querySelectorAll('.pad .held').forEach((b) => b.classList.remove('held'));
-  $('moving-badge').style.display = 'none';
-  if (wasDriving && !quiet) {
-    angle(0).catch(() => {});
-    setTimeout(() => { if (holdTimer === null) angle(0).catch(() => {}); }, 200);
-    setStatus('drive-status', 'Stopped.');
+// three input sources; the first one that is pushed wins
+const inputs = {stick: 0, pad: 0, keys: 0};
+let current = 0, sendTimer = null;
+const driving = () => current !== 0;
+
+function wanted() { return inputs.stick || inputs.pad || inputs.keys; }
+
+function readout() {
+  const m = MOVES[current];
+  const el = $('readout');
+  if (current) {
+    el.textContent = m.arrow + '  ' + m.name + (manualReady ? ' (getting ready…)' : '');
+    el.classList.add('show');
+  } else el.classList.remove('show');
+}
+
+async function update() {
+  const next = wanted();
+  if (next === current) return;
+  const prev = current;
+  current = next;
+  readout();
+  clearInterval(sendTimer); sendTimer = null;
+  if (next === 0) {
+    if (prev && manual) {
+      rx('MANCTRL', 'ANGLE:0').catch(() => {});
+      setTimeout(() => { if (!current && manual) rx('MANCTRL', 'ANGLE:0').catch(() => {}); }, 200);
+    }
+    return;
   }
+  lastDriveAt = Date.now();
+  try { await enterManual(); } catch (e) { return; }
+  if (current !== next) return;                 // changed while entering manual mode
+  readout();
+  const send = () => { lastDriveAt = Date.now(); rx('MANCTRL', 'ANGLE:' + next).catch(() => {}); };
+  send();
+  sendTimer = setInterval(send, REPEAT_MS);
 }
 
-function stopNow() {
-  stopHold(true);
-  $('moving-badge').style.display = 'none';
-  if (manual) angle(0).catch(() => {});
-  setStatus('drive-status', 'Stopped.');
+function stopAll() {
+  inputs.stick = inputs.pad = inputs.keys = 0;
+  keys.clear();
+  resetKnob();
+  update();
+  if (manual) rx('MANCTRL', 'ANGLE:0').catch(() => {});
 }
+$('stop').onclick = stopAll;
 
-// dead-man: losing focus or hiding the page counts as letting go
-window.addEventListener('blur', () => stopHold());
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopHold(); });
+// ---- touch / mouse joystick
+const stick = $('stick'), knob = $('knob');
+let stickPointer = null;
 
-document.querySelectorAll('.pad button[data-a]').forEach((btn) => {
-  const a = Number(btn.dataset.a);
-  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture(e.pointerId); startHold(a, btn); });
-  const up = () => { if (holdAngle === a) stopHold(); };
-  btn.addEventListener('pointerup', up);
-  btn.addEventListener('pointercancel', up);
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+function stickGeometry() {
+  const r = stick.getBoundingClientRect();
+  return {cx: r.left + r.width / 2, cy: r.top + r.height / 2, R: r.width / 2 - knob.offsetWidth / 4, size: r.width};
+}
+function placeKnob(dx, dy) {
+  const g = stickGeometry();
+  knob.style.left = (g.size / 2 - knob.offsetWidth / 2 + dx) + 'px';
+  knob.style.top = (g.size / 2 - knob.offsetHeight / 2 + dy) + 'px';
+}
+function resetKnob() { stick.classList.remove('active'); placeKnob(0, 0); }
+resetKnob();
+
+function stickMove(e) {
+  const g = stickGeometry();
+  let dx = e.clientX - g.cx, dy = e.clientY - g.cy;
+  const d = Math.hypot(dx, dy);
+  if (d > g.R) { dx *= g.R / d; dy *= g.R / d; }
+  placeKnob(dx, dy);
+  inputs.stick = moveFromVector(dx / g.R, -dy / g.R, e.shiftKey);
+  update();
+}
+stick.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  stickPointer = e.pointerId;
+  stick.setPointerCapture(e.pointerId);
+  stick.classList.add('active');
+  stickMove(e);
 });
-$('stop-btn').onclick = stopNow;
+stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickPointer) stickMove(e); });
+const stickUp = (e) => {
+  if (e.pointerId !== stickPointer) return;
+  stickPointer = null;
+  inputs.stick = 0;
+  resetKnob();
+  update();
+};
+stick.addEventListener('pointerup', stickUp);
+stick.addEventListener('pointercancel', stickUp);
+stick.addEventListener('lostpointercapture', stickUp);
+window.addEventListener('resize', () => { if (!stickPointer) resetKnob(); });
 
-const KEYS = {ArrowUp: 4, w: 4, ArrowDown: 8, s: 8, ArrowLeft: 5, a: 5, ArrowRight: 3, d: 3, q: 7, e: 1};
+// ---- keyboard: W/S forward/back, A/D turn (alone = spin), Shift = gentler
+const keys = new Set();
+const KEYMAP = {w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right'};
+function keysToMove(shift) {
+  const up = keys.has('up'), down = keys.has('down'), left = keys.has('left'), right = keys.has('right');
+  const x = (right ? 1 : 0) - (left ? 1 : 0), y = (up ? 1 : 0) - (down ? 1 : 0);
+  if (!x && !y) return 0;
+  if (y < 0) return 8;
+  if (y > 0 && x) return shift ? (x > 0 ? 3 : 5) : (x > 0 ? 2 : 6);
+  if (y > 0) return 4;
+  return x > 0 ? 1 : 7;
+}
 document.addEventListener('keydown', (e) => {
-  if (e.repeat || e.target.tagName === 'INPUT') return;
-  if (e.key === ' ') { e.preventDefault(); stopNow(); return; }
-  const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-  if (a) { e.preventDefault(); startHold(a, document.querySelector('.pad button[data-a="' + a + '"]')); }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); stopAll(); return; }
+  if (k === 'p' && !e.repeat) { snapshot(); return; }
+  if (k === 'f' && !e.repeat) { toggleFullscreen(); return; }
+  if (k === '?' && !e.repeat) { $('help').classList.toggle('show'); return; }
+  if (k === 'escape') { $('help').classList.remove('show'); return; }
+  const dir = KEYMAP[k];
+  if (!dir) return;
+  e.preventDefault();
+  keys.add(dir);
+  inputs.keys = keysToMove(e.shiftKey);
+  update();
 });
 document.addEventListener('keyup', (e) => {
-  const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-  if (a && holdAngle === a) stopHold();
+  const dir = KEYMAP[e.key.toLowerCase()];
+  if (dir) keys.delete(dir);
+  inputs.keys = keysToMove(e.shiftKey);
+  update();
 });
 
-// ---- quick actions ----------------------------------------------------------
-document.querySelectorAll('.actions button').forEach((btn) => {
+// ---- game controller: left stick drives, B (1) stops, Y (3) snapshot
+let padButtons = [];
+function pollPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pad = Array.from(pads).find((p) => p && p.connected);
+  if (pad) {
+    const m = moveFromVector(pad.axes[0] || 0, -(pad.axes[1] || 0), false);
+    if (m !== inputs.pad) { inputs.pad = m; update(); }
+    const pressed = pad.buttons.map((b) => b.pressed);
+    if (pressed[1] && !padButtons[1]) stopAll();
+    if (pressed[3] && !padButtons[3]) snapshot();
+    padButtons = pressed;
+  } else if (inputs.pad) { inputs.pad = 0; update(); }
+  requestAnimationFrame(pollPad);
+}
+window.addEventListener('gamepadconnected', () => toast('Controller connected: left stick drives'));
+requestAnimationFrame(pollPad);
+
+// dead-man: losing focus or hiding the page counts as letting go
+window.addEventListener('blur', () => { keys.clear(); inputs.keys = 0; inputs.stick = 0; resetKnob(); update(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { stopAll(); }
+  else if (camWanted && !camPc && !camStarting) startCam().catch(() => {});
+});
+
+// ---------------------------------------------------------------- actions
+const ACTION_NAMES = {start: 'Clean', pause: 'Pause', dock: 'Dock', locate: 'Find'};
+document.querySelectorAll('#actions button[data-cmd]').forEach((btn) => {
   btn.onclick = async () => {
     const cmd = btn.dataset.cmd;
     try {
-      if (manual && (cmd === 'dock' || cmd === 'start')) { await setManual(false); await new Promise((r) => setTimeout(r, 1500)); }
+      if (manual && cmd !== 'locate') {
+        stopAll(); leaveManual();
+        await new Promise((r) => setTimeout(r, 1500));
+      }
       await command(cmd);
-      setStatus('act-status', 'Sent: ' + cmd, 'ok');
+      toast(ACTION_NAMES[cmd] + ' sent');
     } catch (e) {
-      setStatus('act-status', cmd + ' failed: ' + e.message, 'err');
+      toast(ACTION_NAMES[cmd] + ' failed: ' + e.message);
     }
   };
 });
 
-// leaving the page: drop manual mode and the camera so neither lingers
+// ---------------------------------------------------------------- misc
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+$('fs-btn').onclick = toggleFullscreen;
+if (!document.documentElement.requestFullscreen) $('fs-btn').style.display = 'none';
+$('help-btn').onclick = () => $('help').classList.toggle('show');
+try { if (!localStorage.getItem('lucyDriveHelpSeen')) { $('help').classList.add('show'); localStorage.setItem('lucyDriveHelpSeen', '1'); } } catch (e) {}
+
+// leaving the page: stop, drop manual mode and the camera
 window.addEventListener('pagehide', () => {
-  if (manual) fetch(API + '/api/rxcmd', {method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({cmd: 'MANCTRL', data: 'E', key: '2', wait: 0})}).catch(() => {});
-  stopCam(true);
+  if (manual) {
+    const body = (d) => JSON.stringify({cmd: 'MANCTRL', data: d, key: '2', wait: 0});
+    const opts = (d) => ({method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json'}, body: body(d)});
+    fetch(API + '/api/rxcmd', opts('ANGLE:0')).catch(() => {});
+    fetch(API + '/api/rxcmd', opts('E')).catch(() => {});
+  }
+  stopCam();
 });
+
+startCam().catch(() => {});
 </script>
 </body>
 </html>
