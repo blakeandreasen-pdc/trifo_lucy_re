@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lucy Live</title>
+<style>
+:root {
+  --bg: #1a1a2e; --card: #16213e; --btn: #0f3460; --btn2: #1a3a6e;
+  --text: #eee; --muted: #888; --ok: #4ecca3; --bad: #e23e57; --warn: #f39c12;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 10px 16px 24px; display: flex; flex-direction: column; gap: 10px; }
+header { display: flex; align-items: center; gap: 10px; }
+header h1 { font-size: 17px; margin: 0; flex: 1; }
+header a { color: var(--muted); font-size: 12px; text-decoration: none; }
+.pill { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--card); color: var(--muted); white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); }
+.card { background: var(--card); border-radius: 12px; padding: 10px; }
+.video { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; }
+.video video { width: 100%; height: 100%; object-fit: contain; display: none; }
+.video .idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #666; font-size: 13px; text-align: center; padding: 12px; }
+.video .badge { position: absolute; left: 8px; top: 8px; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.6); }
+.video .badge.live { color: var(--ok); } .video .badge.moving { left: auto; right: 8px; color: var(--warn); display: none; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row .grow { flex: 1; }
+button { font: inherit; color: var(--text); background: var(--btn); border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+button:active, button.held { filter: brightness(1.35); }
+button.on { background: var(--ok); color: #1a1a2e; font-weight: 700; }
+button.danger { background: var(--bad); color: #fff; font-weight: 700; }
+button:disabled { opacity: .45; }
+.status { font-size: 12px; color: var(--muted); min-height: 1.4em; }
+.status.ok { color: var(--ok); } .status.err { color: var(--bad); }
+.pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 330px; margin: 0 auto; }
+.pad button { padding: 0; aspect-ratio: 1.35; font-size: 22px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.pad button small { font-size: 10px; font-weight: 400; color: #9ab; }
+.pad .spin { background: var(--btn2); }
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.actions button { padding: 12px 4px; font-size: 13px; }
+#snapwrap { display: none; }
+#snapwrap img { width: 100%; border-radius: 10px; display: block; }
+#snapwrap .row { margin-top: 6px; font-size: 12px; }
+#snapwrap a { color: var(--ok); }
+.hint { font-size: 11px; color: #667; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Lucy Live</h1>
+    <span class="pill" id="conn">…</span>
+    <span class="pill" id="batt">🔋 --</span>
+    <a href="/">Full controls ›</a>
+  </header>
+
+  <section class="card">
+    <div class="video">
+      <video id="cam-video" muted playsinline autoplay></video>
+      <div class="idle" id="cam-idle">Camera off</div>
+      <span class="badge" id="state-badge">--</span>
+      <span class="badge moving" id="moving-badge">moving</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="live-btn">Start camera</button>
+      <button id="snap-btn">Snapshot</button>
+      <span class="grow"></span>
+      <button id="manual-btn" title="Manual mode is needed to drive. It is kept alive while this is on.">Manual mode</button>
+    </div>
+    <div class="status" id="cam-status">The camera takes about 5 s to wake. It switches off about a minute after you stop.</div>
+    <div id="snapwrap">
+      <img id="snap-img" alt="Lucy snapshot">
+      <div class="row"><span id="snap-info" class="grow"></span><a id="snap-save" download>Save</a></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="pad">
+      <button data-a="6">↖<small>curve L</small></button>
+      <button data-a="4">↑<small>forward</small></button>
+      <button data-a="2">↗<small>curve R</small></button>
+      <button data-a="5">⬉<small>slight L</small></button>
+      <button class="danger" id="stop-btn">■<small style="color:#fdd">stop</small></button>
+      <button data-a="3">⬈<small>slight R</small></button>
+      <button data-a="7" class="spin">⟲<small>spin L</small></button>
+      <button data-a="8">↓<small>back</small></button>
+      <button data-a="1" class="spin">⟳<small>spin R</small></button>
+    </div>
+    <div class="status" id="drive-status" style="text-align:center;margin-top:8px">Hold a direction to drive, let go to stop.</div>
+    <div class="hint">Keys: arrows / WASD, Q/E spin, Space stop</div>
+  </section>
+
+  <section class="card">
+    <div class="actions">
+      <button data-cmd="start">▶ Clean</button>
+      <button data-cmd="pause">⏸ Pause</button>
+      <button data-cmd="dock">⌂ Dock</button>
+      <button data-cmd="locate">🔔 Find</button>
+    </div>
+    <div class="status" id="act-status"></div>
+  </section>
+</main>
+
+<script>
+'use strict';
+const API = location.origin;
+const $ = (id) => document.getElementById(id);
+
+function setStatus(id, msg, cls) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+async function rx(cmd, data, key) {
+  const res = await fetch(API + '/api/rxcmd', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cmd, data: data || '', key: key || '2', wait: 0}),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.error || ('HTTP ' + res.status));
+  return j;
+}
+
+async function command(command) {
+  const res = await fetch(API + '/api/command', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({command}),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.error || ('HTTP ' + res.status));
+  return j;
+}
+
+// ---- status ---------------------------------------------------------------
+async function pollStatus() {
+  try {
+    const s = await (await fetch(API + '/api/status', {cache: 'no-store'})).json();
+    const conn = $('conn');
+    conn.textContent = s.connected ? 'online' : 'offline';
+    conn.className = 'pill ' + (s.connected ? 'ok' : 'bad');
+    $('batt').textContent = '🔋 ' + (s.battery != null ? s.battery + '%' : '--');
+    $('state-badge').textContent = s.status_name || '--';
+  } catch (e) {
+    $('conn').textContent = 'server down';
+    $('conn').className = 'pill bad';
+  }
+}
+pollStatus();
+setInterval(pollStatus, 3000);
+
+// ---- camera (MediaMTX WebRTC; reading path "lucy" wakes her stream) ---------
+const WHEP_URL = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
+let camPc = null, camSession = null, camStarting = null, snapUrl = null;
+
+function startCam() {
+  if (camStarting) return camStarting;
+  if (camPc) return Promise.resolve();
+  camStarting = (async () => {
+    setStatus('cam-status', 'Waking camera...');
+    $('live-btn').textContent = 'Stop camera';
+    const video = $('cam-video');
+    const pc = new RTCPeerConnection();
+    camPc = pc;
+    pc.addTransceiver('video', {direction: 'recvonly'});
+    pc.ontrack = (ev) => { video.srcObject = ev.streams[0] || new MediaStream([ev.track]); };
+    pc.onconnectionstatechange = () => {
+      if (pc === camPc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) {
+        stopCam(true);
+        setStatus('cam-status', 'Camera stream dropped. Press Start camera to retry.', 'err');
+      }
+    };
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const t = setTimeout(resolve, 2000);
+      pc.addEventListener('icegatheringstatechange', () => {
+        if (pc.iceGatheringState === 'complete') { clearTimeout(t); resolve(); }
+      });
+    });
+    const res = await fetch(WHEP_URL, {method: 'POST', headers: {'Content-Type': 'application/sdp'}, body: pc.localDescription.sdp});
+    if (!res.ok) throw new Error('camera server returned ' + res.status + (res.status === 404 ? ' (Lucy did not start streaming)' : ''));
+    camSession = res.headers.get('Location');
+    await pc.setRemoteDescription({type: 'answer', sdp: await res.text()});
+    await new Promise((resolve, reject) => {
+      if (video.videoWidth) return resolve();
+      const t = setTimeout(() => reject(new Error('no video from Lucy after 20 s')), 20000);
+      video.addEventListener('loadeddata', () => { clearTimeout(t); resolve(); }, {once: true});
+    });
+    video.style.display = 'block';
+    $('cam-idle').style.display = 'none';
+    $('state-badge').classList.add('live');
+    setStatus('cam-status', 'Live', 'ok');
+  })().catch((e) => {
+    stopCam(true);
+    setStatus('cam-status', 'Camera error: ' + e.message, 'err');
+    throw e;
+  }).finally(() => { camStarting = null; });
+  return camStarting;
+}
+
+function stopCam(keepStatus) {
+  if (camPc) { camPc.close(); camPc = null; }
+  if (camSession) {
+    fetch(new URL(camSession, WHEP_URL), {method: 'DELETE', keepalive: true}).catch(() => {});
+    camSession = null;
+  }
+  const video = $('cam-video');
+  video.srcObject = null;
+  video.style.display = 'none';
+  $('cam-idle').style.display = 'flex';
+  $('state-badge').classList.remove('live');
+  $('live-btn').textContent = 'Start camera';
+  if (!keepStatus) setStatus('cam-status', 'Camera off');
+}
+
+$('live-btn').onclick = () => { if (camPc || camStarting) stopCam(); else startCam().catch(() => {}); };
+
+$('snap-btn').onclick = async () => {
+  const wasLive = !!camPc && !camStarting;
+  try {
+    await startCam();
+    if (!wasLive) await new Promise((r) => setTimeout(r, 1500));
+    const video = $('cam-video');
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    if (snapUrl) URL.revokeObjectURL(snapUrl);
+    snapUrl = URL.createObjectURL(blob);
+    $('snap-img').src = snapUrl;
+    const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    $('snap-save').href = snapUrl;
+    $('snap-save').download = 'lucy-' + ts + '.png';
+    $('snap-info').textContent = c.width + 'x' + c.height + ' at ' + new Date().toLocaleTimeString();
+    $('snapwrap').style.display = 'block';
+  } catch (e) {
+    setStatus('cam-status', 'Snapshot failed: ' + e.message, 'err');
+  } finally {
+    if (!wasLive) stopCam(true);
+  }
+};
+
+// ---- manual mode: MANCTRL S, then K every 3 s or she drops out (~14 s) -------
+let manual = false, keepTimer = null, manualReady = null;
+
+function setManual(on) {
+  if (on === manual) return manualReady || Promise.resolve();
+  manual = on;
+  $('manual-btn').classList.toggle('on', on);
+  clearInterval(keepTimer); keepTimer = null;
+  if (on) {
+    setStatus('drive-status', 'Entering manual mode...');
+    keepTimer = setInterval(() => rx('MANCTRL', 'K').catch(() => {}), 3000);
+    if (!camPc && !camStarting) startCam().catch(() => {});
+    // she needs a moment after S before ANGLE commands are taken
+    manualReady = rx('MANCTRL', 'S')
+      .then(() => new Promise((r) => setTimeout(r, 1500)))
+      .then(() => setStatus('drive-status', 'Manual mode on. Tap or hold a direction.', 'ok'))
+      .catch((e) => { setStatus('drive-status', 'Manual mode failed: ' + e.message, 'err'); setManual(false); throw e; })
+      .finally(() => { manualReady = null; });
+    return manualReady;
+  }
+  stopHold();
+  rx('MANCTRL', 'E').catch(() => {});
+  setStatus('drive-status', 'Manual mode off.');
+  return Promise.resolve();
+}
+$('manual-btn').onclick = () => setManual(!manual).catch(() => {});
+
+// ---- driving, PTZ style: while a direction is held, resend ANGLE:N every 200 ms;
+// on release send ANGLE:0 (joystick centre = stop), twice in case one is late. ---
+const REPEAT_MS = 200;
+const NAMES = {1: 'spin right', 2: 'curve right', 3: 'slight right', 4: 'forward', 5: 'slight left', 6: 'curve left', 7: 'spin left', 8: 'back'};
+let holdAngle = null, holdTimer = null;
+
+const angle = (n) => rx('MANCTRL', 'ANGLE:' + n);
+
+async function startHold(a, btn) {
+  stopHold(true);
+  holdAngle = a;
+  if (btn) btn.classList.add('held');
+  try {
+    if (!manual) await setManual(true);
+    else if (manualReady) await manualReady;
+  } catch (e) { stopHold(true); return; }
+  if (holdAngle !== a) return;                // released while entering manual mode
+  $('moving-badge').style.display = 'block';
+  setStatus('drive-status', 'Driving: ' + NAMES[a], 'ok');
+  const send = () => angle(a).catch((e) => setStatus('drive-status', 'Send failed: ' + e.message, 'err'));
+  send();
+  holdTimer = setInterval(send, REPEAT_MS);
+}
+
+function stopHold(quiet) {
+  const wasDriving = holdTimer !== null;
+  holdAngle = null;
+  clearInterval(holdTimer); holdTimer = null;
+  document.querySelectorAll('.pad .held').forEach((b) => b.classList.remove('held'));
+  $('moving-badge').style.display = 'none';
+  if (wasDriving && !quiet) {
+    angle(0).catch(() => {});
+    setTimeout(() => { if (holdTimer === null) angle(0).catch(() => {}); }, 200);
+    setStatus('drive-status', 'Stopped.');
+  }
+}
+
+function stopNow() {
+  stopHold(true);
+  $('moving-badge').style.display = 'none';
+  if (manual) angle(0).catch(() => {});
+  setStatus('drive-status', 'Stopped.');
+}
+
+// dead-man: losing focus or hiding the page counts as letting go
+window.addEventListener('blur', () => stopHold());
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopHold(); });
+
+document.querySelectorAll('.pad button[data-a]').forEach((btn) => {
+  const a = Number(btn.dataset.a);
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture(e.pointerId); startHold(a, btn); });
+  const up = () => { if (holdAngle === a) stopHold(); };
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+$('stop-btn').onclick = stopNow;
+
+const KEYS = {ArrowUp: 4, w: 4, ArrowDown: 8, s: 8, ArrowLeft: 5, a: 5, ArrowRight: 3, d: 3, q: 7, e: 1};
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || e.target.tagName === 'INPUT') return;
+  if (e.key === ' ') { e.preventDefault(); stopNow(); return; }
+  const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (a) { e.preventDefault(); startHold(a, document.querySelector('.pad button[data-a="' + a + '"]')); }
+});
+document.addEventListener('keyup', (e) => {
+  const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (a && holdAngle === a) stopHold();
+});
+
+// ---- quick actions ----------------------------------------------------------
+document.querySelectorAll('.actions button').forEach((btn) => {
+  btn.onclick = async () => {
+    const cmd = btn.dataset.cmd;
+    try {
+      if (manual && (cmd === 'dock' || cmd === 'start')) { await setManual(false); await new Promise((r) => setTimeout(r, 1500)); }
+      await command(cmd);
+      setStatus('act-status', 'Sent: ' + cmd, 'ok');
+    } catch (e) {
+      setStatus('act-status', cmd + ' failed: ' + e.message, 'err');
+    }
+  };
+});
+
+// leaving the page: drop manual mode and the camera so neither lingers
+window.addEventListener('pagehide', () => {
+  if (manual) fetch(API + '/api/rxcmd', {method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cmd: 'MANCTRL', data: 'E', key: '2', wait: 0})}).catch(() => {});
+  stopCam(true);
+});
+</script>
+</body>
+</html>

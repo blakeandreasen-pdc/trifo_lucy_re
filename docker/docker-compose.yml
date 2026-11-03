@@ -1,0 +1,55 @@
+# Unrooted Lucy: local cloud + camera via her own RTMP push.
+# Setup: cp .env.example .env && cp ../server/config.yaml config.yaml, set SERVER_IP in .env
+# and server.ip in config.yaml to this host's LAN IP, then `docker compose up -d --build`.
+name: trifo-lucy
+
+services:
+  lucy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: trifo-lucy:local
+    container_name: trifo-lucy
+    restart: unless-stopped
+    init: true        # tini as PID 1 so SIGTERM stops it cleanly
+    ports:
+      - "443:443"       # HTTPS voice packages / OTA
+      - "80:8080"       # web UI on plain http://<host> (upstream port-80 catch-all is broken for HTTP)
+      - "7990:7990"     # QLCloud dispatch (TLS)
+      - "17766:17766"   # MQTT broker (TLS)
+      - "${UI_PORT:-8110}:8080"   # web UI + REST API (the container must keep 8080: the server polls itself there)
+    volumes:
+      - lucy-data:/data
+      - ./config.yaml:/config/config.yaml:ro
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      TZ: ${TZ:-UTC}    # schedules run in this zone
+
+  # Receives Lucy's RTMP push (she streams to pt/push.lightfieldcamera.com.cn, which DNS
+  # must point at this host) and serves it to browsers. Path "lucy" is on-demand:
+  # reading it runs lucy-cam.sh, which wakes her stream and relays it.
+  mediamtx:
+    image: bluenviron/mediamtx:1.9.3-ffmpeg
+    container_name: lucy-mediamtx
+    restart: unless-stopped
+    ports:
+      - "1935:1935"     # RTMP ingest from Lucy
+      - "8889:8889"     # WebRTC (WHEP) for the web UI
+      - "8888:8888"     # HLS  http://<host>:8888/lucy
+      - "8189:8189/udp" # WebRTC media
+    environment:
+      MTX_LOGLEVEL: info
+      MTX_WEBRTCADDITIONALHOSTS: ${SERVER_IP:?set SERVER_IP in .env}
+      MTX_API: "yes"
+      MTX_APIADDRESS: 127.0.0.1:9997
+      MTX_PATHS_LUCY_RUNONDEMAND: /lucy-cam.sh
+      MTX_PATHS_LUCY_RUNONDEMANDSTARTTIMEOUT: 40s
+      MTX_PATHS_LUCY_RUNONDEMANDCLOSEAFTER: 10s
+    volumes:
+      - ./mediamtx/lucy-cam.sh:/lucy-cam.sh:ro
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  lucy-data:

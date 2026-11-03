@@ -147,15 +147,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="card">
     <h2>Camera</h2>
     <div class="map-container">
-      <img id="cam-img" alt="Lucy camera" style="display:block;width:100%;height:auto;">
+      <video id="cam-video" muted playsinline autoplay style="display:none;width:100%;height:auto;background:#111;"></video>
+      <div id="cam-idle" style="padding:40px 12px;text-align:center;color:#666;font-size:13px;">Camera off</div>
     </div>
     <div class="map-controls">
-      <button class="btn btn-sm" style="background:#0f3460;color:#eee;" onclick="refreshCamera()">Snapshot</button>
-      <label style="font-size:12px;color:#888;">
-        <input type="checkbox" id="cam-auto" onchange="toggleCamAuto()"> Auto (3s)
-      </label>
+      <button class="btn btn-sm" id="cam-live-btn" style="background:#0f3460;color:#eee;" onclick="toggleLive()">Start live</button>
+      <button class="btn btn-sm" style="background:#0f3460;color:#eee;" onclick="takeSnapshot()">Snapshot</button>
+      <a id="cam-save" style="display:none;font-size:12px;color:#4ecca3;" download>Save snapshot</a>
+      <a href="/live.html" style="margin-left:auto;font-size:12px;color:#4ecca3;">Live controller &rsaquo;</a>
     </div>
-    <div class="map-status" id="cam-status">Press Snapshot. The camera only runs while Lucy is active.</div>
+    <div class="map-status" id="cam-status">Live view wakes Lucy's camera (about 5 s to start). It stops about a minute after you close it.</div>
+    <img id="cam-img" alt="Lucy snapshot" style="display:none;width:100%;height:auto;margin-top:8px;border-radius:8px;">
   </div>
 
   <div class="card">
@@ -971,56 +973,110 @@ function toggleMapAuto() {
 refreshMap();
 mapAutoInterval = setInterval(refreshMap, 10000);
 
-// --- Camera ---------------------------------------------------------------
-let camAutoInterval = null;
-let camBusy = false;
-let camUrl = null;
+// --- Camera (MediaMTX WebRTC, no root) -----------------------------------
+// MediaMTX path "lucy" is on-demand: reading it wakes Lucy's RTMP push.
+const WHEP_URL = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
+let camPc = null, camSession = null, camStarting = null, camUrl = null;
 
-async function refreshCamera() {
-  if (camBusy) return;
-  camBusy = true;
-  const statusEl = document.getElementById('cam-status');
+function camStatus(msg, cls) {
+  const el = document.getElementById('cam-status');
+  el.textContent = msg;
+  el.className = 'map-status' + (cls ? ' ' + cls : '');
+}
+
+function startLive() {
+  if (camStarting) return camStarting;
+  if (camPc) return Promise.resolve();
+  camStarting = (async () => {
+    camStatus('Waking camera...');
+    const video = document.getElementById('cam-video');
+    const pc = new RTCPeerConnection();
+    camPc = pc;
+    pc.addTransceiver('video', {direction: 'recvonly'});
+    pc.addTransceiver('audio', {direction: 'recvonly'});
+    pc.ontrack = (ev) => { if (ev.track.kind === 'video') video.srcObject = ev.streams[0] || new MediaStream([ev.track]); };
+    pc.onconnectionstatechange = () => {
+      if (pc !== camPc) return;
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        camStatus('Stream dropped', 'err');
+        stopLive();
+      }
+    };
+    await pc.setLocalDescription(await pc.createOffer());
+    // non-trickle: wait for ICE gathering (LAN, so this is quick)
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const t = setTimeout(resolve, 2000);
+      pc.addEventListener('icegatheringstatechange', () => {
+        if (pc.iceGatheringState === 'complete') { clearTimeout(t); resolve(); }
+      });
+    });
+    const res = await fetch(WHEP_URL, {method: 'POST', headers: {'Content-Type': 'application/sdp'}, body: pc.localDescription.sdp});
+    if (!res.ok) throw new Error('camera server returned ' + res.status + (res.status === 404 ? ' (Lucy did not start streaming)' : ''));
+    camSession = res.headers.get('Location');
+    await pc.setRemoteDescription({type: 'answer', sdp: await res.text()});
+    video.style.display = 'block';
+    document.getElementById('cam-idle').style.display = 'none';
+    document.getElementById('cam-live-btn').textContent = 'Stop live';
+    await new Promise((resolve, reject) => {
+      if (video.videoWidth) return resolve();
+      const t = setTimeout(() => reject(new Error('no video from Lucy after 20 s')), 20000);
+      video.addEventListener('loadeddata', () => { clearTimeout(t); resolve(); }, {once: true});
+    });
+    camStatus('Live', 'ok');
+  })().catch((e) => {
+    camStatus('Error: ' + e.message, 'err');
+    stopLive(true);
+    throw e;
+  }).finally(() => { camStarting = null; });
+  return camStarting;
+}
+
+function stopLive(keepStatus) {
+  if (camPc) { camPc.close(); camPc = null; }
+  if (camSession) {
+    fetch(new URL(camSession, WHEP_URL), {method: 'DELETE'}).catch(() => {});
+    camSession = null;
+  }
+  const video = document.getElementById('cam-video');
+  video.srcObject = null;
+  video.style.display = 'none';
+  document.getElementById('cam-idle').style.display = 'block';
+  document.getElementById('cam-live-btn').textContent = 'Start live';
+  if (!keepStatus) camStatus('Camera off');
+}
+
+function toggleLive() {
+  if (camPc || camStarting) stopLive(); else startLive().catch(() => {});
+}
+
+async function takeSnapshot() {
+  const wasLive = !!camPc && !camStarting;
   try {
-    const res = await fetch(API + '/api/camera.png', {cache: 'no-store'});
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      statusEl.textContent = data.error || ('Camera error ' + res.status);
-      statusEl.className = 'map-status err';
-      return;
-    }
-    const age = parseFloat(res.headers.get('X-Frame-Age'));
-    const blob = await res.blob();
+    await startLive();
+    const video = document.getElementById('cam-video');
+    // give the decoder a moment after a cold start so the frame isn't grey
+    if (!wasLive) await new Promise((r) => setTimeout(r, 1500));
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     if (camUrl) URL.revokeObjectURL(camUrl);
     camUrl = URL.createObjectURL(blob);
-    document.getElementById('cam-img').src = camUrl;
-    if (isNaN(age)) {
-      statusEl.textContent = 'Frame loaded';
-      statusEl.className = 'map-status ok';
-    } else if (age < 10) {
-      statusEl.textContent = 'Live (' + age.toFixed(1) + 's old)';
-      statusEl.className = 'map-status ok';
-    } else {
-      const mins = Math.round(age / 60);
-      statusEl.textContent = 'Last frame, ' + (mins >= 1 ? mins + ' min' : Math.round(age) + 's') +
-        ' old. Camera is off while Lucy is idle.';
-      statusEl.className = 'map-status';
-    }
+    const img = document.getElementById('cam-img');
+    img.src = camUrl; img.style.display = 'block';
+    const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    const save = document.getElementById('cam-save');
+    save.href = camUrl; save.download = 'lucy-' + ts + '.png'; save.style.display = 'inline';
+    camStatus('Snapshot ' + c.width + 'x' + c.height + ' at ' + new Date().toLocaleTimeString(), 'ok');
   } catch (e) {
-    statusEl.textContent = 'Error: ' + e.message;
-    statusEl.className = 'map-status err';
+    camStatus('Snapshot failed: ' + e.message, 'err');
   } finally {
-    camBusy = false;
+    if (!wasLive) stopLive(true);
   }
 }
 
-function toggleCamAuto() {
-  if (document.getElementById('cam-auto').checked) {
-    refreshCamera();
-    if (!camAutoInterval) camAutoInterval = setInterval(refreshCamera, 3000);
-  } else {
-    if (camAutoInterval) { clearInterval(camAutoInterval); camAutoInterval = null; }
-  }
-}
+window.addEventListener('pagehide', () => stopLive(true));
 
 // SSE for real-time updates
 function connectSSE() {
