@@ -358,7 +358,7 @@ const MOVES = {
   5: {name: 'Gentle left', arrow: '↖'}, 3: {name: 'Gentle right', arrow: '↗'},
   6: {name: 'Turn left', arrow: '↰'}, 2: {name: 'Turn right', arrow: '↱'},
   7: {name: 'Spin left', arrow: '⟲'}, 1: {name: 'Spin right', arrow: '⟳'},
-  8: {name: 'Reverse', arrow: '↓'},
+  10: {name: 'Reverse', arrow: '↓'},   // ANGLE:8 is the documented 'back', but 10 is what reverses on this robot
 };
 const REPEAT_MS = 200;
 
@@ -372,7 +372,7 @@ function moveFromVector(x, y, gentle) {
   if (a <= 40 || (gentle && a <= 65)) return right ? 3 : 5;
   if (a <= 65) return right ? 2 : 6;
   if (a <= 125) return right ? 1 : 7;
-  return 8;
+  return 10;
 }
 
 // three input sources; the first one that is pushed wins
@@ -475,7 +475,7 @@ function keysToMove(shift) {
   const up = keys.has('up'), down = keys.has('down'), left = keys.has('left'), right = keys.has('right');
   const x = (right ? 1 : 0) - (left ? 1 : 0), y = (up ? 1 : 0) - (down ? 1 : 0);
   if (!x && !y) return 0;
-  if (y < 0) return 8;
+  if (y < 0) return 10;
   if (y > 0 && x) return shift ? (x > 0 ? 3 : 5) : (x > 0 ? 2 : 6);
   if (y > 0) return 4;
   return x > 0 ? 1 : 7;
