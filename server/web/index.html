@@ -976,7 +976,8 @@ mapAutoInterval = setInterval(refreshMap, 10000);
 // --- Camera (MediaMTX WebRTC, no root) -----------------------------------
 // MediaMTX path "lucy" is on-demand: reading it wakes Lucy's RTMP push.
 // Camera endpoint: same origin (/lucy/whep, when a reverse proxy routes it to MediaMTX),
-// else MediaMTX directly on :8889. MediaMTX answers OPTIONS with 204; this server doesn't.
+// else MediaMTX directly on :8889. Both servers answer OPTIONS with 204, but only MediaMTX
+// allows PATCH (WHEP trickle ICE), and nginx passes that header through.
 const WHEP_SAME_ORIGIN = location.origin + '/lucy/whep';
 const WHEP_DIRECT = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
 let WHEP_URL = WHEP_DIRECT;
@@ -984,7 +985,7 @@ let whepProbe = null;
 function whepUrl() {
   if (!whepProbe) {
     whepProbe = fetch(WHEP_SAME_ORIGIN, {method: 'OPTIONS'})
-      .then((r) => { if (r.status === 204) WHEP_URL = WHEP_SAME_ORIGIN; })
+      .then((r) => { if (r.ok && /PATCH/.test(r.headers.get('Access-Control-Allow-Methods') || '')) WHEP_URL = WHEP_SAME_ORIGIN; })
       .catch(() => {})
       .then(() => WHEP_URL);
   }
