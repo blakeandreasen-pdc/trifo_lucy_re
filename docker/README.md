@@ -12,9 +12,11 @@ The 1080p feed, the map and smooth joystick driving still need root (`lucy_strea
 
 ## Setup
 
-1. DNS: point these names at the docker host:
-   - `euiot.trifo.com`, `eudispatch.trifo.com`: the local cloud
-   - `pt.lightfieldcamera.com.cn`, `push.lightfieldcamera.com.cn`, `lt.lightfieldcamera.com.cn`, `live.lightfieldcamera.com.cn`: the video push
+1. DNS: on the resolver Lucy uses, forward two wildcard domains to the docker host:
+   - `*.trifo.com`: the local cloud (she uses `euiot` and `eudispatch`)
+   - `*.lightfieldcamera.com.cn`: the video push (she uses `pt` and `push`, with `lt` and `live` for pulls)
+
+   Wildcards are simplest and also catch names she might use that aren't listed here. If your DNS can't do wildcards, add those six names as individual records.
 2. Copy the config files:
    ```sh
    cd docker

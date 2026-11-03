@@ -26,7 +26,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}    # schedules run in this zone
 
-  # Receives Lucy's RTMP push (she streams to pt/push.lightfieldcamera.com.cn, which DNS
+  # Receives Lucy's RTMP push (she streams to *.lightfieldcamera.com.cn, which DNS
   # must point at this host) and serves it to browsers. Path "lucy" is on-demand:
   # reading it runs lucy-cam.sh, which wakes her stream and relays it.
   mediamtx:
