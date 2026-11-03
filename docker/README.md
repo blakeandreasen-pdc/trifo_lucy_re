@@ -36,6 +36,30 @@ Lucy reconnects within about 20 s of the server coming up.
 
 The camera only runs while someone is watching. `mediamtx/lucy-cam.sh` starts when a viewer opens path `lucy`. It sends the wake commands, then relays her `app-name/<id>` stream into `lucy`. MediaMTX stops it about 70 s after the last viewer leaves, and Lucy stops pushing about 15 s later.
 
+## Behind a reverse proxy
+
+The pages look for the camera endpoint at `/lucy/whep` on their own address first. If it isn't there, they fall back to `http://<host>:8889`. That fallback can't work behind an HTTPS proxy, because the browser blocks it as mixed content and the port usually isn't proxied. So route `/lucy/whep` to MediaMTX alongside the UI. For nginx:
+
+```nginx
+location / {
+    proxy_pass http://<host>:8110;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+# WebRTC signalling (WHEP) for the camera. This covers /lucy/whep and /lucy/whep/<session>.
+location /lucy/whep {
+    proxy_pass http://<host>:8889;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_buffering off;
+}
+```
+
+Put the same `allow`/`deny` rules on both locations.
+
+Only the signalling goes through the proxy. The video goes straight from the browser to `<SERVER_IP>:8189/udp` (`SERVER_IP` in `.env`), so viewers need a route to that address: the LAN, or a VPN into it.
+
 ## Security
 
 There's no authentication on the web UI, the API or the stream. Keep it on the LAN, and never port-forward or reverse-proxy it publicly.

@@ -975,7 +975,21 @@ mapAutoInterval = setInterval(refreshMap, 10000);
 
 // --- Camera (MediaMTX WebRTC, no root) -----------------------------------
 // MediaMTX path "lucy" is on-demand: reading it wakes Lucy's RTMP push.
-const WHEP_URL = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
+// Camera endpoint: same origin (/lucy/whep, when a reverse proxy routes it to MediaMTX),
+// else MediaMTX directly on :8889. MediaMTX answers OPTIONS with 204; this server doesn't.
+const WHEP_SAME_ORIGIN = location.origin + '/lucy/whep';
+const WHEP_DIRECT = location.protocol + '//' + location.hostname + ':8889/lucy/whep';
+let WHEP_URL = WHEP_DIRECT;
+let whepProbe = null;
+function whepUrl() {
+  if (!whepProbe) {
+    whepProbe = fetch(WHEP_SAME_ORIGIN, {method: 'OPTIONS'})
+      .then((r) => { if (r.status === 204) WHEP_URL = WHEP_SAME_ORIGIN; })
+      .catch(() => {})
+      .then(() => WHEP_URL);
+  }
+  return whepProbe;
+}
 let camPc = null, camSession = null, camStarting = null, camUrl = null;
 
 function camStatus(msg, cls) {
@@ -1011,7 +1025,7 @@ function startLive() {
         if (pc.iceGatheringState === 'complete') { clearTimeout(t); resolve(); }
       });
     });
-    const res = await fetch(WHEP_URL, {method: 'POST', headers: {'Content-Type': 'application/sdp'}, body: pc.localDescription.sdp});
+    const res = await fetch(await whepUrl(), {method: 'POST', headers: {'Content-Type': 'application/sdp'}, body: pc.localDescription.sdp});
     if (!res.ok) throw new Error('camera server returned ' + res.status + (res.status === 404 ? ' (Lucy did not start streaming)' : ''));
     camSession = res.headers.get('Location');
     await pc.setRemoteDescription({type: 'answer', sdp: await res.text()});
