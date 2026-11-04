@@ -6,6 +6,7 @@
 | [maps.md](maps.md) | Live map, her map files, slots, zones, map protection, melding |
 | [driving.md](driving.md) | Internal ZeroMQ sockets, motion commands, parking view |
 | [robot_notes.md](robot_notes.md) | Security mode, mopping, Wi-Fi setup, USB ports, her localisation |
+| [trifo_max.md](trifo_max.md) | The Trifo Max without root: how it differs, map, go-to, RTSP, no audio |
 | [3d_scanner.md](3d_scanner.md) | Using her as a 3D scanner (experiment) |
 | [research/](research/README.md) | Spring 2026 research notes, published as written |
 

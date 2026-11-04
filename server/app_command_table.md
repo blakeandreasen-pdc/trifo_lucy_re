@@ -17,6 +17,10 @@ Verified on Lucy: A2B (12, "x,y" metres), SPIRAL via key 13 in manual mode, MANC
 BLOWER via smart-speaker blowerMode. Not yet answered: GET_LUCY_POSE/GET_SIMPLE_MAP (18),
 RTMP_PARAM/VOICETALK_PARAM (10), GET_SPOT_CLEANING_INFO (3) - accepted, no reply seen.
 
+Verified on the Max (see `docs/trifo_max.md`): MANCTRL reverse is ANGLE:10, GET_MAP (8),
+A2B_NO_CLEAN (12), BLOWER (2), VOICE (2/3), RTMP_PARAM and VOICETALK_PARAM (10, slow),
+GET_SYSTEM_CONFIG (15). Key 18 gets no reply on the Max.
+
 ```
 A      key=2    cmd=LANGUAGE                           args=(String p3) data=p3
 B      key=2    cmd=VOICE                              args=(String p3) data=p3
