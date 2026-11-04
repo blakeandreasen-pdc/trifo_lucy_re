@@ -106,9 +106,26 @@ the app sends it: `GET_SYSTEM_CONFIG` (key 15), then `NET_INFO` (key 1), then `R
 Whether the order matters wasn't tested.
 
 - The reply is base64 of AES-128-ECB with PKCS7 padding. The key is the first 16 characters
-  of the lowercase hex MD5 of a constant byte array in the app (`h3.s`).
-- Decrypted, it's `host;key;port;type;user;pass;path`, with user `txen` and the stream's uuid
-  as the path.
+  of the lowercase hex MD5 of a constant in the app (`h3.s`), used as ASCII:
+  ```python
+  import base64, hashlib
+  from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+  from cryptography.hazmat.primitives.padding import PKCS7
+
+  CONST = bytes([83, 23, 78, 83, 109, 14, 87, 51, 87, 35, 81, 75, 98, 54, 98, 54])
+  KEY = hashlib.md5(CONST).hexdigest()[:16].encode()
+
+  def decrypt_rtmp_param(data: str) -> list[str]:
+      d = Cipher(algorithms.AES(KEY), modes.ECB()).decryptor()
+      raw = d.update(base64.b64decode(data)) + d.finalize()
+      u = PKCS7(128).unpadder()
+      return (u.update(raw) + u.finalize()).decode().split(";")
+  ```
+- Decrypted, it's `host;key;port;type;user;pass;path`: port `8554`, user `txen`, a
+  12-character password, and the stream's uuid as the path.
+- Keep sending `RTSP_THROB` about every 2.5 s, or the server closes again, then open
+  `rtsp://txen:<pass>@<robot ip>:8554/<path>` over TCP, e.g.
+  `ffprobe -rtsp_transport tcp "rtsp://txen:<pass>@<robot ip>:8554/<path>"`.
 
 It isn't worth using. The SDP advertises H.264 plus AAC 44.1 kHz mono, but the audio track is
 empty and malformed, and video alone arrives at about 1 frame per second. The RTMP push is
